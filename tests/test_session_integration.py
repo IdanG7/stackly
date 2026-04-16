@@ -20,7 +20,7 @@ import subprocess
 
 import pytest
 
-from debugbridge.session import DebugSession
+from debugbridge.session import DebugSession, DebugSessionError
 
 
 @pytest.mark.integration
@@ -114,3 +114,30 @@ def test_catch_null_deref_crash_via_create(crash_app_path) -> None:
         session._dbg = None  # type: ignore[attr-defined]
         with contextlib.suppress(Exception):
             dbg.Release()
+
+
+@pytest.mark.integration
+def test_detach_process_releases_target(crash_app_waiting: subprocess.Popen) -> None:
+    """detach() must release pybag from the target without killing the session.
+
+    Proves the cleanup gap surfaced by Phase 2a research is closed:
+    after detach() the session is back to its pre-attach state, query
+    tools fail with "Not attached", and a subsequent attach_local works.
+    """
+    session = DebugSession()
+    try:
+        attach = session.attach_local(crash_app_waiting.pid)
+        assert attach.status == "attached", f"initial attach failed: {attach.message}"
+        assert session._dbg is not None  # type: ignore[attr-defined]
+
+        session.detach()
+        assert session._dbg is None  # type: ignore[attr-defined]
+
+        with pytest.raises(DebugSessionError, match="Not attached"):
+            session.get_callstack()
+
+        # Re-attach after detach — proves detach() did not leave torn state.
+        reattach = session.attach_local(crash_app_waiting.pid)
+        assert reattach.status == "attached", f"re-attach failed: {reattach.message}"
+    finally:
+        session.close()

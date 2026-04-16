@@ -59,6 +59,18 @@ def register(mcp: FastMCP, session: DebugSession) -> None:
         return session.attach_local(pid)
 
     @mcp.tool()
+    def detach_process() -> None:
+        """Release the target process without stopping the MCP server.
+
+        Counterpart to ``attach_process``. After this returns, subsequent
+        query tools raise "Not attached" until a new ``attach_process`` is
+        issued. Intended for clients (e.g. the ``debugbridge fix`` agent)
+        that want to hand the target back to the OS on exit while keeping
+        a long-lived server running.
+        """
+        session.detach()
+
+    @mcp.tool()
     def get_exception() -> ExceptionInfo | None:
         """Return info about the most recent exception on the attached process.
 

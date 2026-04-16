@@ -173,6 +173,18 @@ class DebugSession:
         with self._lock:
             self._close_locked()
 
+    def detach(self) -> None:
+        """Public MCP-exposed variant of ``close()``.
+
+        Same body as ``close()`` — both take the lock and call
+        ``_close_locked()``. Two methods with identical bodies documents intent
+        at the call site: ``close()`` is used from shutdown / destructors;
+        ``detach()`` is what the MCP ``detach_process`` tool binds to, so a
+        client can release pybag from the target without stopping the server.
+        """
+        with self._lock:
+            self._close_locked()
+
     def _close_locked(self) -> None:
         if self._dbg is None:
             return

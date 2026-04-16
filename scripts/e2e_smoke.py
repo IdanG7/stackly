@@ -107,6 +107,7 @@ async def run_client_flow(pid: int) -> int:
                 expected = {
                     "attach_process",
                     "continue_execution",
+                    "detach_process",
                     "get_callstack",
                     "get_exception",
                     "get_locals",
