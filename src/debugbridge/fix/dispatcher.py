@@ -16,7 +16,12 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from debugbridge.fix.briefing import extract_source_snippets, render_briefing, write_briefing
+from debugbridge.fix.briefing import (
+    append_retry_feedback,
+    extract_source_snippets,
+    render_briefing,
+    write_briefing,
+)
 from debugbridge.fix.build_runner import run_command
 from debugbridge.fix.claude_runner import (
     run_claude_headless,
@@ -230,7 +235,13 @@ def run_autonomous(
                     worktree_preserved=False,
                 )
 
-            # Build failed -- retry feedback will be added in task 2a.3.6
+            # Build failed -- append feedback for next iteration
+            append_retry_feedback(
+                wt_briefing,
+                attempt_num,
+                build_output,
+                claude_result.result,
+            )
 
         # All attempts exhausted
         failure_path = write_failure_report(repo, crash_hash, attempts, "all attempts exhausted")

@@ -333,3 +333,70 @@ def test_auto_loop_does_not_touch_main_tree(
     assert final_files == initial_files, (
         f"New files appeared in repo root: {final_files - initial_files}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Retry-feedback loop tests (task 2a.3.6)
+# ---------------------------------------------------------------------------
+
+
+def test_auto_loop_retries_on_build_failure_with_appended_output(
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """run_autonomous with build fail on attempt 1, pass on attempt 2.
+
+    Second claude call's briefing must contain the first build's error output
+    under a "Previous attempt" section.
+    """
+    _patch_autonomous_deps(monkeypatch, build_ok=True)  # base patches
+
+    # run_command: fail first call, pass second
+    build_call_count = 0
+
+    def fake_run_command(cmd, cwd, timeout=600):
+        nonlocal build_call_count
+        build_call_count += 1
+        if build_call_count == 1:
+            return (False, "ld: undefined symbol x")
+        return (True, "build ok")
+
+    monkeypatch.setattr(
+        "debugbridge.fix.dispatcher.run_command",
+        fake_run_command,
+    )
+
+    # run_claude_headless: record the briefing content each time
+    briefing_snapshots: list[str] = []
+
+    def fake_claude_headless(**kwargs):
+        briefing_path = kwargs.get("briefing_path")
+        if briefing_path and Path(briefing_path).exists():
+            briefing_snapshots.append(Path(briefing_path).read_text(encoding="utf-8"))
+        return _canned_claude_result(ok=True)
+
+    monkeypatch.setattr(
+        "debugbridge.fix.dispatcher.run_claude_headless",
+        fake_claude_headless,
+    )
+
+    from debugbridge.fix.dispatcher import run_autonomous
+
+    result = run_autonomous(
+        repo=git_repo,
+        pid=42,
+        host="127.0.0.1",
+        port=8585,
+        build_cmd="make",
+        max_attempts=3,
+    )
+
+    assert result.ok is True
+    assert len(result.attempts) == 2
+
+    # First briefing should NOT contain "Previous attempt"
+    assert "Previous attempt" not in briefing_snapshots[0]
+
+    # Second briefing should contain the build error from attempt 1
+    assert "Previous attempt" in briefing_snapshots[1]
+    assert "ld: undefined symbol x" in briefing_snapshots[1]

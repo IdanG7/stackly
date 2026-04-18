@@ -28,7 +28,7 @@ from pathlib import Path
 
 from debugbridge.fix.models import CallFrame, CrashCapture
 
-__all__ = ["extract_source_snippets", "render_briefing", "write_briefing"]
+__all__ = ["append_retry_feedback", "extract_source_snippets", "render_briefing", "write_briefing"]
 
 
 def _repo_relative(repo: Path, candidate: Path) -> Path | None:
@@ -240,4 +240,23 @@ def write_briefing(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8", newline="\n")
 
 
-# TODO(task 2a.3.6): add append_retry_feedback(briefing_path, attempt_num, build_output, claude_result_text)
+def append_retry_feedback(
+    briefing_path: Path,
+    attempt_num: int,
+    build_output: str,
+    claude_result_text: str | None = None,
+) -> None:
+    """Append a 'Previous attempt' section to an existing briefing file.
+
+    The build output is truncated to 2000 characters to keep briefings
+    within reasonable token budgets.  Claude's previous response (if
+    available) is included as a blockquote capped at 500 characters.
+    """
+    section = f"\n\n## Previous attempt {attempt_num}\n\n"
+    if claude_result_text:
+        section += f"Claude proposed:\n> {claude_result_text[:500]}\n\n"
+    if len(build_output) > 2000:
+        build_output = build_output[:2000] + "\n[output truncated]"
+    section += f"Build failed:\n\n```\n{build_output}\n```\n\nPlease produce a different fix taking this build error into account.\n"
+    with open(briefing_path, "a", encoding="utf-8") as f:
+        f.write(section)
