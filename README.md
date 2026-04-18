@@ -2,7 +2,7 @@
 
 Remote crash capture MCP server for native Windows applications. Exposes live DbgEng debugger state (call stack, exception info, threads, locals) from local or remote processes to MCP-compatible AI clients like Claude Code, Cursor, and Claude Desktop.
 
-> **Status:** Phase 1 MVP — in active development. Not yet published to PyPI.
+> **Status:** Phase 2a (Fix-loop MVP) -- in active development. Not yet published to PyPI.
 
 ## Why
 
@@ -53,6 +53,33 @@ uv pip install debugbridge   # not yet on PyPI; clone and `uv sync` for now
 | `set_breakpoint` | Set a breakpoint at `file:line` or `module!symbol` |
 | `step_next` | Step over one line |
 | `continue_execution` | Resume the process |
+
+## Fix-loop agent (Phase 2a)
+
+Autonomous crash-fix pipeline. Captures crash state via MCP, generates a fix
+with Claude Code, validates with your build command, and emits a `.patch` file.
+
+### Hand-off mode (interactive)
+
+```bash
+debugbridge fix --pid <PID> --repo D:/myapp
+```
+
+Opens an interactive Claude Code session with the crash briefing preloaded.
+
+### Autonomous mode
+
+```bash
+debugbridge fix --pid <PID> --repo D:/myapp \
+    --auto \
+    --build-cmd "cmake --build build --config Debug" \
+    --test-cmd "ctest" \
+    --max-attempts 3
+```
+
+Runs headless. Produces `.debugbridge/patches/crash-<hash>.patch` on success.
+
+**Prerequisites:** `claude` CLI on PATH. Run `debugbridge doctor` to verify.
 
 ## Development
 

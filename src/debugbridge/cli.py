@@ -144,14 +144,20 @@ def doctor() -> None:
 def fix(
     pid: int = typer.Option(..., "--pid", help="PID of the target process."),
     repo: str = typer.Option(".", "--repo", help="Path to the git repository."),
-    conn_str: str | None = typer.Option(None, "--conn-str", help="Remote dbgsrv connection string."),
-    build_cmd: str | None = typer.Option(None, "--build-cmd", help="Build command to validate fix."),
+    conn_str: str | None = typer.Option(
+        None, "--conn-str", help="Remote dbgsrv connection string."
+    ),
+    build_cmd: str | None = typer.Option(
+        None, "--build-cmd", help="Build command to validate fix."
+    ),
     test_cmd: str | None = typer.Option(None, "--test-cmd", help="Test command to validate fix."),
     auto: bool = typer.Option(False, "--auto", help="Run autonomously (headless claude -p)."),
     host: str = typer.Option("127.0.0.1", "--host", help="MCP server host."),
     port: int = typer.Option(8585, "--port", help="MCP server port."),
     model: str = typer.Option("sonnet", "--model", help="Claude model for autonomous mode."),
-    max_attempts: int = typer.Option(3, "--max-attempts", help="Max fix attempts in autonomous mode."),
+    max_attempts: int = typer.Option(
+        3, "--max-attempts", help="Max fix attempts in autonomous mode."
+    ),
 ) -> None:
     """Run the crash-fix agent against a live process."""
     import shutil

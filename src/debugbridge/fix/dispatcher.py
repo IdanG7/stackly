@@ -33,7 +33,7 @@ from debugbridge.fix.claude_runner import (
     write_system_append,
 )
 from debugbridge.fix.mcp_client import capture_crash, ensure_server_running, shutdown_server
-from debugbridge.fix.models import AttemptRecord, FixResult
+from debugbridge.fix.models import AttemptRecord, CrashCapture, FixResult
 from debugbridge.fix.patch_writer import write_failure_report, write_patch
 from debugbridge.fix.worktree import (
     capture_diff,

@@ -39,10 +39,8 @@ def test_fix_auto_rejects_missing_claude(tmp_path, monkeypatch):
     )
 
     # Ensure claude is NOT on PATH for this test
-    monkeypatch.setattr("shutil.which", lambda name: None if name == "claude" else None)
+    monkeypatch.setattr("shutil.which", lambda name: None)
 
-    result = runner.invoke(
-        app, ["fix", "--pid", "0", "--repo", str(tmp_path), "--auto"]
-    )
+    result = runner.invoke(app, ["fix", "--pid", "0", "--repo", str(tmp_path), "--auto"])
     assert result.exit_code != 0
     assert "claude" in result.output.lower()

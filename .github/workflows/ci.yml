@@ -19,6 +19,15 @@ jobs:
       - name: Sync dependencies
         run: uv sync --all-extras
 
+      - name: Enforce fix/ coupling rule
+        shell: bash
+        run: |
+          if grep -rq "from debugbridge\.session" src/debugbridge/fix; then
+            echo "ERROR: fix/ must not import from debugbridge.session"
+            grep -rn "from debugbridge\.session" src/debugbridge/fix
+            exit 1
+          fi
+
       - name: Lint (ruff)
         run: uv run ruff check src tests
 
