@@ -24,15 +24,21 @@ def git_repo(tmp_path: Path) -> Path:
     # Set local user identity — CI runners have no global git config.
     subprocess.run(
         ["git", "config", "user.email", "test@example.com"],
-        cwd=str(tmp_path), capture_output=True, check=True,
+        cwd=str(tmp_path),
+        capture_output=True,
+        check=True,
     )
     subprocess.run(
         ["git", "config", "user.name", "Test"],
-        cwd=str(tmp_path), capture_output=True, check=True,
+        cwd=str(tmp_path),
+        capture_output=True,
+        check=True,
     )
     subprocess.run(
         ["git", "commit", "--allow-empty", "-m", "init"],
-        cwd=str(tmp_path), capture_output=True, check=True,
+        cwd=str(tmp_path),
+        capture_output=True,
+        check=True,
     )
     return tmp_path
 
