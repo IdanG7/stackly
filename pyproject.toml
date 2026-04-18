@@ -66,5 +66,6 @@ reportMissingTypeStubs = false  # pybag has no stubs
 testpaths = ["tests"]
 markers = [
     "integration: tests that require Windows Debugging Tools and a live process (deselect with '-m \"not integration\"')",
+    "slow: tests that are expensive or time-consuming (deselect with '-m \"not slow\"')",
 ]
 addopts = ["-ra", "--strict-markers"]
