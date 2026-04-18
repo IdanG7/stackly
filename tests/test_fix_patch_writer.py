@@ -26,7 +26,9 @@ def _stub_claude_result(**overrides: object) -> ClaudeRunResult:
     return ClaudeRunResult(**defaults)  # type: ignore[arg-type]
 
 
-def _stub_attempt(attempt: int = 1, build_ok: bool = True, test_ok: bool | None = None) -> AttemptRecord:
+def _stub_attempt(
+    attempt: int = 1, build_ok: bool = True, test_ok: bool | None = None
+) -> AttemptRecord:
     return AttemptRecord(
         attempt=attempt,
         claude_result=_stub_claude_result(),
