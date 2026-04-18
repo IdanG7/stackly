@@ -85,6 +85,70 @@ def _install_signal_handlers(state: _FixState) -> None:
         signal.signal(signal.SIGBREAK, handler)
 
 
+def _format_tokens(n: int) -> str:
+    """Format a token count as human-readable (e.g. 18500 -> '18.5K')."""
+    if n >= 1000:
+        return f"{n / 1000:.1f}K"
+    return str(n)
+
+
+def _format_summary(result: FixResult, capture: CrashCapture) -> str:
+    """Produce a human-readable summary block for a completed fix run.
+
+    Called by ``run_autonomous`` right before returning. The output is printed
+    to the console via Rich.
+    """
+    # Crash description
+    exc = capture.exception
+    if exc and capture.callstack:
+        frame = capture.callstack[0]
+        crash_line = f"{exc.code_name} @ {frame.module}!{frame.function}"
+    elif exc:
+        crash_line = exc.code_name
+    else:
+        crash_line = "unknown"
+
+    # Patch or failure
+    if result.patch_path:
+        patch_line = str(result.patch_path)
+    elif result.failure_report_path:
+        patch_line = f"{result.failure_report_path} (failed)"
+    else:
+        patch_line = "(none)"
+
+    # Build status
+    if result.attempts:
+        last_ok = next(
+            (a for a in result.attempts if a.build_ok),
+            None,
+        )
+        if last_ok:
+            build_line = f"passed on attempt {last_ok.attempt}"
+        else:
+            build_line = f"failed after {len(result.attempts)} attempt(s)"
+    else:
+        build_line = "not run"
+
+    tokens_in = _format_tokens(result.total_input_tokens)
+    tokens_out = _format_tokens(result.total_output_tokens)
+
+    status = "fix complete" if result.ok else "fix failed"
+
+    lines = [
+        f"[debugbridge] {status}",
+        f"  crash:    {crash_line}",
+        f"  patch:    {patch_line}",
+        f"  build:    {build_line}",
+        f"  tokens:   {tokens_in} in / {tokens_out} out",
+        f"  cost:     ${result.total_cost_usd:.2f}",
+    ]
+
+    if result.ok and result.patch_path:
+        lines.append(f"  apply with: git apply {result.patch_path}")
+
+    return "\n".join(lines)
+
+
 def run_handoff(
     repo: Path,
     pid: int,

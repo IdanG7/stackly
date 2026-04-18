@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from debugbridge.fix.models import ClaudeRunResult, CrashCapture
+from debugbridge.fix.models import AttemptRecord, ClaudeRunResult, CrashCapture, FixResult
 from debugbridge.models import CallFrame, ExceptionInfo
 
 
@@ -587,3 +587,111 @@ def test_sigint_handler_is_idempotent(
 
     # terminate should have been called exactly once
     assert mock_claude.terminate.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Cost-summary aggregation tests (task 2a.3.9)
+# ---------------------------------------------------------------------------
+
+
+def test_fix_result_aggregates_cost_across_attempts() -> None:
+    """FixResult must sum cost and tokens across AttemptRecords."""
+    a1 = AttemptRecord(
+        attempt=1,
+        claude_result=ClaudeRunResult(
+            ok=True,
+            is_error=False,
+            subtype="success",
+            result="fix attempt 1",
+            total_cost_usd=0.08,
+            input_tokens=10000,
+            output_tokens=1000,
+            num_turns=3,
+            duration_ms=15000,
+            returncode=0,
+            session_id="s1",
+        ),
+        build_ok=False,
+        build_output="error",
+        duration_s=20.0,
+    )
+    a2 = AttemptRecord(
+        attempt=2,
+        claude_result=ClaudeRunResult(
+            ok=True,
+            is_error=False,
+            subtype="success",
+            result="fix attempt 2",
+            total_cost_usd=0.12,
+            input_tokens=15000,
+            output_tokens=2000,
+            num_turns=5,
+            duration_ms=25000,
+            returncode=0,
+            session_id="s2",
+        ),
+        build_ok=True,
+        build_output="build ok",
+        duration_s=30.0,
+    )
+    result = FixResult(
+        ok=True,
+        mode="auto",
+        crash_hash="a1b2c3d4",
+        attempts=[a1, a2],
+        total_cost_usd=sum(a.claude_result.total_cost_usd for a in [a1, a2]),
+        total_input_tokens=sum(a.claude_result.input_tokens for a in [a1, a2]),
+        total_output_tokens=sum(a.claude_result.output_tokens for a in [a1, a2]),
+    )
+
+    assert result.total_cost_usd == pytest.approx(0.20, abs=0.001)
+    assert result.total_input_tokens == 25000
+    assert result.total_output_tokens == 3000
+
+
+def test_format_summary_contains_expected_fields() -> None:
+    """_format_summary must produce a text block with crash, patch, cost, etc."""
+    from debugbridge.fix.dispatcher import _format_summary
+
+    capture = _canned_capture()
+    result = FixResult(
+        ok=True,
+        mode="auto",
+        crash_hash="a1b2c3d4",
+        patch_path=Path(".debugbridge/patches/crash-a1b2c3d4.patch"),
+        attempts=[
+            AttemptRecord(
+                attempt=1,
+                claude_result=ClaudeRunResult(
+                    ok=True,
+                    is_error=False,
+                    subtype="success",
+                    result="fixed it",
+                    total_cost_usd=0.18,
+                    input_tokens=18500,
+                    output_tokens=2100,
+                    num_turns=7,
+                    duration_ms=30000,
+                    returncode=0,
+                    session_id="s1",
+                ),
+                build_ok=True,
+                build_output="ok",
+                duration_s=35.0,
+            ),
+        ],
+        total_cost_usd=0.18,
+        total_input_tokens=18500,
+        total_output_tokens=2100,
+    )
+
+    summary = _format_summary(result, capture)
+
+    # Must contain key information
+    assert "fix complete" in summary
+    assert "EXCEPTION_ACCESS_VIOLATION" in summary
+    assert "crash-a1b2c3d4.patch" in summary
+    assert "attempt 1" in summary.lower()
+    assert "$0.18" in summary
+    assert "18.5K" in summary or "18500" in summary
+    assert "git apply" in summary
