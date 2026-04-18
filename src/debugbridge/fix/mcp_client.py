@@ -1,13 +1,16 @@
-"""MCP client lifecycle for the fix agent (task 2a.1.1 — server spawn/shutdown half).
+"""MCP client lifecycle for the fix agent.
 
-This module auto-spawns ``debugbridge serve`` if one isn't already listening on
-the requested host:port, then waits for the Streamable-HTTP transport to report
-"Uvicorn running" before returning. Shutdown sends SIGBREAK (on Windows) to the
-process group and falls back to SIGKILL after a grace period.
+Provides server lifecycle (spawn/shutdown) and crash capture via MCP.
 
-The crash-capture call (task 2a.1.2) is intentionally *not* here yet — keeping
-the spawn/shutdown half on its own lets us unit-test them without any real
-MCP plumbing.
+Server lifecycle (task 2a.1.1): auto-spawns ``debugbridge serve`` if one isn't
+already listening on the requested host:port, then waits for the Streamable-HTTP
+transport to report "Uvicorn running" before returning. Shutdown sends SIGBREAK
+(on Windows) to the process group and falls back to SIGKILL after a grace period.
+
+Crash capture (task 2a.1.2): connects as an MCP client via streamablehttp_client,
+calls attach_process / get_exception / get_callstack / get_threads / get_locals,
+and assembles a CrashCapture Pydantic model with crash-hash computed from
+``worktree.compute_crash_hash``.
 
 Architectural constraint (PLAN.md decision #1): this module does NOT import
 ``debugbridge.session``. All debugger-state access goes through MCP.
@@ -15,12 +18,22 @@ Architectural constraint (PLAN.md decision #1): this module does NOT import
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import logging
 import signal
 import socket
 import subprocess
 import sys
 import time
+
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+
+from debugbridge.fix.models import CallFrame, CrashCapture, ExceptionInfo, Local, ThreadInfo
+from debugbridge.fix.worktree import compute_crash_hash
+
+logger = logging.getLogger(__name__)
 
 
 def _port_has_listener(host: str, port: int, timeout: float = 0.5) -> bool:
@@ -118,10 +131,128 @@ def _terminate(proc: subprocess.Popen, grace_s: float = 5.0) -> None:
             proc.wait(timeout=1.0)
 
 
-# TODO(task 2a.1.2): add async capture_crash(pid, mcp_url, conn_str=None) -> CrashCapture
-#   - open streamablehttp_client + ClientSession
-#   - call initialize()
-#   - verify tool set includes attach_process + detach_process (R9 mitigation)
-#   - call attach_process, get_exception, get_callstack, get_threads, get_locals
-#   - import compute_crash_hash from debugbridge.fix.worktree (lands in 2a.3.1)
-#   - return a CrashCapture Pydantic model
+_REQUIRED_TOOLS = {"attach_process", "detach_process"}
+
+
+def _parse_list_result(
+    structured: dict | list | None,
+) -> list[dict]:
+    """Extract a list of dicts from MCP structuredContent.
+
+    Handles both ``{"result": [...]}`` wrapper and bare list shapes.
+    Returns empty list on None or unexpected types.
+    """
+    if structured is None:
+        return []
+    if isinstance(structured, list):
+        return structured
+    if isinstance(structured, dict):
+        inner = structured.get("result", structured)
+        if isinstance(inner, list):
+            return inner
+    return []
+
+
+async def _capture_async(
+    pid: int,
+    mcp_url: str,
+    conn_str: str | None = None,
+) -> CrashCapture:
+    """Connect to a running DebugBridge MCP server and capture crash state.
+
+    Opens a streamablehttp_client connection, verifies we're talking to a real
+    DebugBridge server (R9 mitigation), then drives the attach/inspect tool
+    sequence and returns a fully-populated CrashCapture.
+
+    Raises RuntimeError if the server is not a DebugBridge instance.
+    """
+    async with streamablehttp_client(mcp_url) as (read, write, _session_id):  # noqa: SIM117
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+
+            # R9 mitigation: verify this is actually a DebugBridge server.
+            tools_result = await session.list_tools()
+            tool_names = {t.name for t in tools_result.tools}
+            missing = _REQUIRED_TOOLS - tool_names
+            if missing:
+                raise RuntimeError(
+                    f"Port is bound by a non-DebugBridge MCP server; "
+                    f"missing tools: {sorted(missing)}. "
+                    f"Pass --port N or stop the other process."
+                )
+
+            # 1. Attach to the target process.
+            attach_args: dict = {"pid": pid}
+            if conn_str is not None:
+                attach_args["conn_str"] = conn_str
+            attach_result = await session.call_tool("attach_process", attach_args)
+            attach_data = attach_result.structuredContent or {}
+
+            process_name = attach_data.get("process_name")
+            binary_path = attach_data.get("binary_path")
+
+            # 2. Get exception info (may be None for non-crashed processes).
+            exception: ExceptionInfo | None = None
+            try:
+                exc_result = await session.call_tool("get_exception", {})
+                exc_data = exc_result.structuredContent
+                if exc_data:
+                    exception = ExceptionInfo.model_validate(exc_data)
+            except Exception:
+                logger.debug("get_exception failed or returned unparseable data", exc_info=True)
+
+            # 3. Get call stack.
+            callstack: list[CallFrame] = []
+            try:
+                stack_result = await session.call_tool("get_callstack", {"max_frames": 32})
+                raw_frames = _parse_list_result(stack_result.structuredContent)
+                callstack = [CallFrame.model_validate(f) for f in raw_frames]
+            except Exception:
+                logger.debug("get_callstack failed or returned unparseable data", exc_info=True)
+
+            # 4. Get threads.
+            threads: list[ThreadInfo] = []
+            try:
+                threads_result = await session.call_tool("get_threads", {})
+                raw_threads = _parse_list_result(threads_result.structuredContent)
+                threads = [ThreadInfo.model_validate(t) for t in raw_threads]
+            except Exception:
+                logger.debug("get_threads failed or returned unparseable data", exc_info=True)
+
+            # 5. Get locals for frame 0.
+            locals_: list[Local] = []
+            try:
+                locals_result = await session.call_tool("get_locals", {"frame_index": 0})
+                raw_locals = _parse_list_result(locals_result.structuredContent)
+                locals_ = [Local.model_validate(loc) for loc in raw_locals]
+            except Exception:
+                logger.debug("get_locals failed or returned unparseable data", exc_info=True)
+
+            # 6. Build the CrashCapture (crash_hash computed below).
+            capture = CrashCapture(
+                pid=attach_data.get("pid", pid),
+                process_name=process_name,
+                binary_path=binary_path,
+                exception=exception,
+                callstack=callstack,
+                threads=threads,
+                locals_=locals_,
+                crash_hash="unknown",  # placeholder — computed next
+            )
+            capture.crash_hash = compute_crash_hash(capture)
+            return capture
+
+
+def capture_crash(
+    pid: int,
+    mcp_url: str,
+    conn_str: str | None = None,
+) -> CrashCapture:
+    """Synchronous wrapper around :func:`_capture_async`.
+
+    Connects to the DebugBridge MCP server at ``mcp_url``, attaches to
+    process ``pid``, captures crash state, and returns a :class:`CrashCapture`.
+
+    Raises RuntimeError if the server is not a DebugBridge instance (R9).
+    """
+    return asyncio.run(_capture_async(pid, mcp_url, conn_str))
