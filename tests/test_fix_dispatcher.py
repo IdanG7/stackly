@@ -1,6 +1,7 @@
-"""Tests for fix/dispatcher.py (task 2a.2.2).
+"""Tests for fix/dispatcher.py (tasks 2a.2.2, 2a.3.5).
 
 Hand-off dispatcher: capture crash via MCP, write briefing, launch interactive Claude.
+Autonomous dispatcher: capture → briefing → worktree → claude headless → build → patch/fail.
 All external calls (capture_crash, subprocess.run) are monkeypatched — no real server
 or claude binary needed.
 """
@@ -12,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from debugbridge.fix.models import CrashCapture
+from debugbridge.fix.models import ClaudeRunResult, CrashCapture
 from debugbridge.models import CallFrame, ExceptionInfo
 
 
@@ -136,3 +137,199 @@ def test_handoff_writes_briefing_and_invokes_claude_with_correct_args(
     assert result.ok is True
     assert result.mode == "handoff"
     assert result.crash_hash == canned.crash_hash
+
+
+# ---------------------------------------------------------------------------
+# Autonomous loop tests (task 2a.3.5)
+# ---------------------------------------------------------------------------
+
+
+def _canned_claude_result(ok: bool = True) -> ClaudeRunResult:
+    """Return a canned ClaudeRunResult for monkeypatching."""
+    return ClaudeRunResult(
+        ok=ok,
+        is_error=False,
+        subtype="success",
+        result="fixed null check",
+        total_cost_usd=0.12,
+        input_tokens=15000,
+        output_tokens=2000,
+        num_turns=5,
+        duration_ms=30000,
+        returncode=0,
+        session_id="s1",
+    )
+
+
+def _patch_autonomous_deps(monkeypatch: pytest.MonkeyPatch, build_ok: bool = True) -> None:
+    """Monkeypatch all external dependencies for run_autonomous."""
+    canned = _canned_capture()
+
+    # capture_crash — return canned capture without MCP
+    monkeypatch.setattr(
+        "debugbridge.fix.dispatcher.capture_crash",
+        lambda pid, mcp_url, conn_str=None: canned,
+    )
+
+    # ensure_server_running — no-op, return None (server already up)
+    monkeypatch.setattr(
+        "debugbridge.fix.dispatcher.ensure_server_running",
+        lambda host="127.0.0.1", port=8585, startup_timeout_s=30.0: None,
+    )
+
+    # shutdown_server — no-op
+    monkeypatch.setattr(
+        "debugbridge.fix.dispatcher.shutdown_server",
+        lambda proc, grace_s=5.0: None,
+    )
+
+    # run_claude_headless — return canned success result
+    monkeypatch.setattr(
+        "debugbridge.fix.dispatcher.run_claude_headless",
+        lambda **kwargs: _canned_claude_result(ok=True),
+    )
+
+    # run_command — return build_ok
+    monkeypatch.setattr(
+        "debugbridge.fix.dispatcher.run_command",
+        lambda cmd, cwd, timeout=600: (build_ok, "build ok" if build_ok else "build error"),
+    )
+
+    # capture_diff — return a fake diff
+    monkeypatch.setattr(
+        "debugbridge.fix.dispatcher.capture_diff",
+        lambda worktree: (
+            "diff --git a/foo.c b/foo.c\n--- a/foo.c\n+++ b/foo.c\n@@ -1 +1 @@\n-bad\n+good\n"
+        ),
+    )
+
+    # create_worktree — create a real subdirectory (skip git worktree add)
+    def fake_create_worktree(repo: Path, crash_hash: str) -> Path:
+        wt = repo / ".debugbridge" / f"wt-{crash_hash}"
+        wt.mkdir(parents=True, exist_ok=True)
+        # Make it look like a git repo for build_runner etc.
+        (wt / ".git").write_text("gitdir: fake", encoding="utf-8")
+        return wt
+
+    monkeypatch.setattr(
+        "debugbridge.fix.dispatcher.create_worktree",
+        fake_create_worktree,
+    )
+
+    # cleanup_worktree_on_success — just remove the directory
+    monkeypatch.setattr(
+        "debugbridge.fix.dispatcher.cleanup_worktree_on_success",
+        lambda repo, worktree, crash_hash: None,
+    )
+
+    # cleanup_worktree_on_failure — no-op (preserve worktree)
+    monkeypatch.setattr(
+        "debugbridge.fix.dispatcher.cleanup_worktree_on_failure",
+        lambda repo, worktree, crash_hash: None,
+    )
+
+
+def test_auto_loop_single_attempt_success(
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """run_autonomous: single attempt succeeds → ok=True, 1 attempt, patch written."""
+    _patch_autonomous_deps(monkeypatch, build_ok=True)
+
+    from debugbridge.fix.dispatcher import run_autonomous
+
+    result = run_autonomous(
+        repo=git_repo,
+        pid=42,
+        host="127.0.0.1",
+        port=8585,
+        build_cmd="make",
+        max_attempts=3,
+    )
+
+    assert result.ok is True
+    assert result.mode == "auto"
+    assert len(result.attempts) == 1
+    assert result.attempts[0].build_ok is True
+    assert result.crash_hash == "a1b2c3d4"
+
+    # Patch file must exist under .debugbridge/patches/
+    patch_path = git_repo / ".debugbridge" / "patches" / "crash-a1b2c3d4.patch"
+    assert patch_path.exists(), f"Patch file not found at {patch_path}"
+    assert "diff --git" in patch_path.read_text(encoding="utf-8")
+
+    # result.patch_path should point to the patch
+    assert result.patch_path is not None
+    assert result.patch_path.exists()
+
+
+def test_auto_loop_build_failure_exhausts_attempts(
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """run_autonomous: build always fails, max_attempts=1 → ok=False, failure report."""
+    _patch_autonomous_deps(monkeypatch, build_ok=False)
+
+    from debugbridge.fix.dispatcher import run_autonomous
+
+    result = run_autonomous(
+        repo=git_repo,
+        pid=42,
+        host="127.0.0.1",
+        port=8585,
+        build_cmd="make",
+        max_attempts=1,
+    )
+
+    assert result.ok is False
+    assert result.mode == "auto"
+    assert len(result.attempts) == 1
+    assert result.attempts[0].build_ok is False
+    assert result.crash_hash == "a1b2c3d4"
+
+    # Failure report must exist
+    fail_path = git_repo / ".debugbridge" / "patches" / "crash-a1b2c3d4.failed.md"
+    assert fail_path.exists(), f"Failure report not found at {fail_path}"
+    assert result.failure_report_path is not None
+
+
+def test_auto_loop_does_not_touch_main_tree(
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """run_autonomous must never modify files outside .debugbridge/ in the repo."""
+    _patch_autonomous_deps(monkeypatch, build_ok=True)
+
+    # Create a sentinel file in the repo root
+    sentinel = git_repo / "SENTINEL.txt"
+    sentinel.write_text("DO NOT TOUCH", encoding="utf-8")
+
+    # Record initial state of the repo root (excluding .debugbridge)
+    initial_files = {
+        f.name for f in git_repo.iterdir() if f.name not in (".git", ".debugbridge", ".gitignore")
+    }
+
+    from debugbridge.fix.dispatcher import run_autonomous
+
+    result = run_autonomous(
+        repo=git_repo,
+        pid=42,
+        host="127.0.0.1",
+        port=8585,
+        build_cmd="make",
+        max_attempts=3,
+    )
+
+    assert result.ok is True
+
+    # Sentinel file must be unchanged
+    assert sentinel.exists(), "SENTINEL.txt was deleted"
+    assert sentinel.read_text(encoding="utf-8") == "DO NOT TOUCH", "SENTINEL.txt was modified"
+
+    # No new files in repo root outside .debugbridge/ and .gitignore
+    final_files = {
+        f.name for f in git_repo.iterdir() if f.name not in (".git", ".debugbridge", ".gitignore")
+    }
+    assert final_files == initial_files, (
+        f"New files appeared in repo root: {final_files - initial_files}"
+    )
