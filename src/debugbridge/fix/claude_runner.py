@@ -15,9 +15,19 @@ wrappers land in tasks 2a.2.2 and 2a.3.4.
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
-__all__ = ["write_mcp_config", "write_system_append"]
+from debugbridge.fix.models import ClaudeRunResult
+
+__all__ = [
+    "_build_claude_run_result",
+    "_parse_claude_json",
+    "run_claude_headless",
+    "write_mcp_config",
+    "write_system_append",
+]
 
 
 _SYSTEM_APPEND_BODY = """\
@@ -86,7 +96,162 @@ def write_system_append(target_dir: Path) -> Path:
 
 
 # TODO(task 2a.2.2): add run_claude_interactive(repo, briefing_rel, mcp_config_path) -> int
-# TODO(task 2a.3.4): add run_claude_headless(cwd, briefing_path, mcp_config_path,
-#                                            system_append_path, model, max_turns,
-#                                            max_budget_usd, build_cmd) -> ClaudeRunResult
-# TODO(task 2a.3.4): add _parse_claude_json(stdout) -> dict for the headless JSON schema
+
+
+def _parse_claude_json(stdout: str) -> dict | None:
+    """Extract the last JSON object from ``claude -p --output-format json`` output.
+
+    Claude may print warnings, progress text, or other noise before the JSON
+    payload.  We scan backwards for the last line that starts with ``{`` and
+    attempt to parse it.  Returns ``None`` if no valid JSON is found.
+    """
+    for line in reversed(stdout.strip().splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                continue
+    return None
+
+
+def _build_claude_run_result(
+    parsed: dict | None,
+    returncode: int,
+    raw_stdout: str,
+    raw_stderr: str,
+) -> ClaudeRunResult:
+    """Build a :class:`ClaudeRunResult` from parsed JSON or from failure state."""
+    if parsed is None:
+        subtype = "empty_output" if not raw_stdout.strip() else "unparseable_output"
+        return ClaudeRunResult(
+            ok=False,
+            is_error=True,
+            subtype=subtype,
+            result="",
+            session_id="",
+            total_cost_usd=0.0,
+            input_tokens=0,
+            output_tokens=0,
+            num_turns=0,
+            duration_ms=0,
+            raw_stdout=raw_stdout,
+            raw_stderr=raw_stderr,
+            returncode=returncode,
+        )
+
+    usage = parsed.get("usage", {})
+    input_tokens = usage.get("input_tokens", 0) + usage.get("cache_read_input_tokens", 0)
+
+    is_error = parsed.get("is_error", False)
+    return ClaudeRunResult(
+        ok=not is_error and returncode == 0,
+        is_error=is_error,
+        subtype=parsed.get("subtype", "unknown"),
+        result=parsed.get("result", ""),
+        session_id=parsed.get("session_id", ""),
+        total_cost_usd=parsed.get("total_cost_usd", 0.0),
+        input_tokens=input_tokens,
+        output_tokens=usage.get("output_tokens", 0),
+        num_turns=parsed.get("num_turns", 0),
+        duration_ms=parsed.get("duration_ms", 0),
+        raw_stdout=raw_stdout,
+        raw_stderr=raw_stderr,
+        returncode=returncode,
+    )
+
+
+def run_claude_headless(
+    cwd: Path,
+    briefing_path: Path,
+    mcp_config_path: Path,
+    system_append_path: Path,
+    model: str = "sonnet",
+    max_turns: int = 20,
+    max_budget_usd: float = 0.75,
+    build_cmd: str | None = None,
+) -> ClaudeRunResult:
+    """Run ``claude -p`` headless and parse the JSON output.
+
+    Builds the full CLI argv with ``--output-format json``,
+    ``--strict-mcp-config``, ``--permission-mode bypassPermissions``, and
+    scoped ``--allowedTools`` (never broad ``Bash(*)``).
+
+    Returns a :class:`ClaudeRunResult` — always, even on timeout.
+    """
+    allowed_tools = ["Read", "Edit", "Write", "Glob", "Grep", "mcp__debugbridge__*"]
+    if build_cmd:
+        first_word = build_cmd.split()[0] if build_cmd.split() else "build"
+        allowed_tools.append(f"Bash({first_word} *)")
+
+    try:
+        briefing_rel = briefing_path.relative_to(cwd).as_posix()
+    except ValueError:
+        briefing_rel = str(briefing_path)
+
+    cmd = [
+        "claude",
+        "-p",
+        f"Read @{briefing_rel} and produce the minimal fix.",
+        "--output-format",
+        "json",
+        "--model",
+        model,
+        "--max-turns",
+        str(max_turns),
+        "--mcp-config",
+        str(mcp_config_path),
+        "--strict-mcp-config",
+        "--append-system-prompt",
+        str(system_append_path),
+        "--allowedTools",
+        ",".join(allowed_tools),
+        "--max-budget-usd",
+        str(max_budget_usd),
+        "--permission-mode",
+        "bypassPermissions",
+    ]
+
+    creationflags = 0
+    if sys.platform == "win32":
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=600,
+            creationflags=creationflags,
+        )
+        parsed = _parse_claude_json(result.stdout)
+        return _build_claude_run_result(parsed, result.returncode, result.stdout, result.stderr)
+    except subprocess.TimeoutExpired as exc:
+        stdout = (
+            (exc.stdout or b"").decode("utf-8", errors="replace")
+            if isinstance(exc.stdout, bytes)
+            else (exc.stdout or "")
+        )
+        stderr = (
+            (exc.stderr or b"").decode("utf-8", errors="replace")
+            if isinstance(exc.stderr, bytes)
+            else (exc.stderr or "")
+        )
+        return ClaudeRunResult(
+            ok=False,
+            is_error=True,
+            subtype="timeout",
+            result="",
+            session_id="",
+            total_cost_usd=0.0,
+            input_tokens=0,
+            output_tokens=0,
+            num_turns=0,
+            duration_ms=600_000,
+            raw_stdout=stdout,
+            raw_stderr=stderr,
+            returncode=-1,
+        )

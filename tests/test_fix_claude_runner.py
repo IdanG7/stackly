@@ -1,7 +1,7 @@
-"""Tests for fix/claude_runner.py writer helpers (task 2a.1.5).
+"""Tests for fix/claude_runner.py (tasks 2a.1.5 + 2a.3.4).
 
-Subprocess-wrapping tests land in 2a.3.4. This file tests only the two
-helpers that write claude-config artifacts to disk.
+Writer helpers (write_mcp_config, write_system_append) tested first.
+Headless subprocess parser + result builder tests added in 2a.3.4.
 """
 
 from __future__ import annotations
@@ -9,7 +9,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from debugbridge.fix.claude_runner import write_mcp_config, write_system_append
+from debugbridge.fix.claude_runner import (
+    _build_claude_run_result,
+    _parse_claude_json,
+    write_mcp_config,
+    write_system_append,
+)
 
 
 def test_write_mcp_config_schema(tmp_path: Path) -> None:
@@ -66,3 +71,60 @@ def test_write_system_append_creates_parent_directories(tmp_path: Path) -> None:
     deep = tmp_path / "x" / "y"
     write_system_append(deep)
     assert (deep / "system-append.md").exists()
+
+
+# ---------------------------------------------------------------------------
+# Task 2a.3.4 — _parse_claude_json + _build_claude_run_result
+# ---------------------------------------------------------------------------
+
+
+def test_parse_claude_json_handles_noise_prefix() -> None:
+    """Parser must extract the JSON object even when preceded by warning lines."""
+    stdout = (
+        "WARN: auth cache refreshed\n"
+        '{"type":"result","subtype":"success","is_error":false,"result":"ok",'
+        '"total_cost_usd":0.05,"usage":{"input_tokens":1,"output_tokens":2,'
+        '"cache_read_input_tokens":10},"num_turns":1,"duration_ms":100,'
+        '"session_id":"abc"}\n'
+    )
+    parsed = _parse_claude_json(stdout)
+    assert parsed is not None
+    assert parsed["total_cost_usd"] == 0.05
+
+
+def test_parse_claude_json_returns_none_for_empty() -> None:
+    """Empty stdout must yield None, not raise."""
+    assert _parse_claude_json("") is None
+
+
+def test_parse_claude_json_returns_none_for_garbage() -> None:
+    """Non-JSON stdout must yield None."""
+    assert _parse_claude_json("not json at all") is None
+
+
+def test_build_claude_run_result_from_parsed_json() -> None:
+    """Well-formed parsed dict must map 1:1 to ClaudeRunResult fields."""
+    parsed = {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "result": "ok",
+        "total_cost_usd": 0.05,
+        "usage": {
+            "input_tokens": 1,
+            "output_tokens": 2,
+            "cache_read_input_tokens": 10,
+        },
+        "num_turns": 1,
+        "duration_ms": 100,
+        "session_id": "abc",
+    }
+    result = _build_claude_run_result(parsed, returncode=0, raw_stdout="...", raw_stderr="")
+    assert result.ok is True
+    assert result.is_error is False
+    assert result.subtype == "success"
+    assert result.total_cost_usd == 0.05
+    assert result.input_tokens == 11  # 1 + 10 cache_read
+    assert result.output_tokens == 2
+    assert result.num_turns == 1
+    assert result.session_id == "abc"
