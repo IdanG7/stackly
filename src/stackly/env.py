@@ -26,9 +26,9 @@ INSTALL_GUIDANCE = (
     "Windows Debugging Tools are required. Install via one of:\n"
     "  1. Windows SDK installer → select the 'Debugging Tools for Windows' component\n"
     "     https://learn.microsoft.com/windows-hardware/drivers/debugger/\n"
-    "  2. Run scripts/install-debugging-tools.ps1 (bundled with DebugBridge)\n"
+    "  2. Run scripts/install-debugging-tools.ps1 (bundled with Stackly)\n"
     f"Expected install path: {CANONICAL_DEBUGGERS_X64}\n"
-    "After install, make sure that path is on your PATH, then re-run 'debugbridge doctor'."
+    "After install, make sure that path is on your PATH, then re-run 'stackly doctor'."
 )
 
 
@@ -77,12 +77,12 @@ def check_debugging_tools() -> EnvCheckResult:
 CLAUDE_CLI_GUIDANCE = (
     "Claude Code CLI not found on PATH. Install via:\n"
     "  https://docs.claude.com/en/docs/claude-code/getting-started\n"
-    "After install, run `claude --version` to confirm, then re-run `debugbridge doctor`."
+    "After install, run `claude --version` to confirm, then re-run `stackly doctor`."
 )
 
 CLAUDE_BYPASS_GUIDANCE = (
     "The `claude --dangerously-skip-permissions` first-run prompt has not been\n"
-    "acknowledged yet. Autonomous `debugbridge fix --auto` runs will hang on\n"
+    "acknowledged yet. Autonomous `stackly fix --auto` runs will hang on\n"
     "the interactive prompt the first time they launch.\n"
     "Acknowledge once (interactively): `claude --dangerously-skip-permissions --help`\n"
     "This is a warning, not a hard failure."
@@ -104,7 +104,7 @@ def check_claude_bypass_acknowledged(settings_path: Path | None = None) -> EnvCh
     ``--dangerously-skip-permissions`` prompt. The Phase 2a autonomous fix path
     requires this acknowledgement to avoid hanging on an interactive
     confirmation. Missing-ack is a warning, not a hard failure — see
-    ``debugbridge doctor`` wiring.
+    ``stackly doctor`` wiring.
 
     Tests pass an explicit ``settings_path`` to avoid touching the user's
     real home directory.

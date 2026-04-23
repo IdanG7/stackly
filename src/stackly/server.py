@@ -1,4 +1,4 @@
-"""FastMCP server wiring for DebugBridge.
+"""FastMCP server wiring for Stackly.
 
 Creates a single ``FastMCP`` instance, attaches a single ``DebugSession``, and
 registers all tools. Callers choose the transport via :func:`run`.
@@ -10,14 +10,14 @@ from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 
-from debugbridge import tools
-from debugbridge.session import DebugSession
+from stackly import tools
+from stackly.session import DebugSession
 
 
 def build_app() -> tuple[FastMCP, DebugSession]:
     """Construct the server and its backing session. Separate from :func:`run`
     so tests can exercise the server without opening a network socket."""
-    mcp = FastMCP("debugbridge")
+    mcp = FastMCP("stackly")
     session = DebugSession()
     tools.register(mcp, session)
     return mcp, session
@@ -28,7 +28,7 @@ def run(
     host: str = "127.0.0.1",
     port: int = 8585,
 ) -> None:
-    """Start the DebugBridge MCP server on the chosen transport.
+    """Start the Stackly MCP server on the chosen transport.
 
     HTTP transport exposes ``http://{host}:{port}/mcp`` (the MCP Streamable
     HTTP convention). Stdio transport is for MCP clients that launch the

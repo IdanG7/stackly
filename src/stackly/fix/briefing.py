@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from debugbridge.fix.models import CallFrame, CrashCapture
+from stackly.fix.models import CallFrame, CrashCapture
 
 __all__ = ["append_retry_feedback", "extract_source_snippets", "render_briefing", "write_briefing"]
 
@@ -225,7 +225,7 @@ def render_briefing(
         "continue_execution",
     ]
     for t in tools:
-        parts.append(f"- `mcp__debugbridge__{t}`\n")
+        parts.append(f"- `mcp__stackly__{t}`\n")
     parts.append(
         "\nDo NOT call `detach_process` or `continue_execution`"
         " --- those would release or resume the target.\n"

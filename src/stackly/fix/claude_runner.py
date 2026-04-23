@@ -19,7 +19,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from debugbridge.fix.models import ClaudeRunResult
+from stackly.fix.models import ClaudeRunResult
 
 __all__ = [
     "_build_claude_run_result",
@@ -32,14 +32,14 @@ __all__ = [
 
 
 _SYSTEM_APPEND_BODY = """\
-You are a crash-fix agent operating inside the `debugbridge` toolchain.
+You are a crash-fix agent operating inside the `stackly` toolchain.
 
 Your job:
 1. Read the crash briefing referenced in the first user message.
-2. Use the `mcp__debugbridge__*` tools if you need live debugger state
+2. Use the `mcp__stackly__*` tools if you need live debugger state
    beyond what the briefing contains (stack beyond the initial frames,
    locals for other frames, thread list). Do NOT call
-   `mcp__debugbridge__detach_process` or `mcp__debugbridge__continue_execution`
+   `mcp__stackly__detach_process` or `mcp__stackly__continue_execution`
    -- those would release or resume the target process and break the session.
 3. Read only files that appear in the briefing's Source context section or
    that you can justify are in the direct call chain to the crash site.
@@ -63,14 +63,14 @@ def write_mcp_config(target_dir: Path, host: str, port: int) -> Path:
     """Write ``target_dir / "mcp-config.json"`` describing our MCP server.
 
     Matches Claude Code's ``--mcp-config`` expected schema (RESEARCH.md 1.2):
-    ``{"mcpServers": {"debugbridge": {"type": "http", "url": ...}}}``.
+    ``{"mcpServers": {"stackly": {"type": "http", "url": ...}}}``.
 
     Creates ``target_dir`` if it doesn't exist. Returns the written file path.
     """
     target_dir.mkdir(parents=True, exist_ok=True)
     config = {
         "mcpServers": {
-            "debugbridge": {
+            "stackly": {
                 "type": "http",
                 "url": f"http://{host}:{port}/mcp",
             }
@@ -199,7 +199,7 @@ def run_claude_headless(
 
     Returns a :class:`ClaudeRunResult` — always, even on timeout.
     """
-    allowed_tools = ["Read", "Edit", "Write", "Glob", "Grep", "mcp__debugbridge__*"]
+    allowed_tools = ["Read", "Edit", "Write", "Glob", "Grep", "mcp__stackly__*"]
     if build_cmd:
         first_word = build_cmd.split()[0] if build_cmd.split() else "build"
         allowed_tools.append(f"Bash({first_word} *)")

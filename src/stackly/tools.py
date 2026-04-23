@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
-from debugbridge.models import (
+from stackly.models import (
     AttachResult,
     Breakpoint,
     CallFrame,
@@ -21,11 +21,11 @@ from debugbridge.models import (
     StepResult,
     ThreadInfo,
 )
-from debugbridge.session import DebugSession
+from stackly.session import DebugSession
 
 
 def register(mcp: FastMCP, session: DebugSession) -> None:
-    """Wire all DebugBridge tools onto ``mcp``, backed by ``session``."""
+    """Wire all Stackly tools onto ``mcp``, backed by ``session``."""
 
     # ---- Tier A — crash triage ----
 
@@ -64,7 +64,7 @@ def register(mcp: FastMCP, session: DebugSession) -> None:
 
         Counterpart to ``attach_process``. After this returns, subsequent
         query tools raise "Not attached" until a new ``attach_process`` is
-        issued. Intended for clients (e.g. the ``debugbridge fix`` agent)
+        issued. Intended for clients (e.g. the ``stackly fix`` agent)
         that want to hand the target back to the OS on exit while keeping
         a long-lived server running.
         """

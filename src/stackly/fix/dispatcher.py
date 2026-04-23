@@ -1,14 +1,14 @@
 """Fix command dispatcher -- orchestrates hand-off and autonomous modes.
 
 Hand-off mode (``run_handoff``, task 2a.2.2): captures crash state via MCP,
-writes a briefing file and MCP config under ``.debugbridge/``, then launches
+writes a briefing file and MCP config under ``.stackly/``, then launches
 an interactive Claude Code session so the developer can collaborate on the fix.
 
 Autonomous mode (``run_autonomous``, task 2a.3.5): capture → briefing →
 worktree → claude headless loop → build validation → patch/failure.
 
 Architecture constraint (PLAN.md decision #1): this module does NOT import
-``debugbridge.session``. All debugger-state access goes through MCP.
+``stackly.session``. All debugger-state access goes through MCP.
 """
 
 from __future__ import annotations
@@ -19,23 +19,23 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from debugbridge.fix.briefing import (
+from stackly.fix.briefing import (
     append_retry_feedback,
     extract_source_snippets,
     render_briefing,
     write_briefing,
 )
-from debugbridge.fix.build_runner import run_command
-from debugbridge.fix.claude_runner import (
+from stackly.fix.build_runner import run_command
+from stackly.fix.claude_runner import (
     run_claude_headless,
     run_claude_interactive,
     write_mcp_config,
     write_system_append,
 )
-from debugbridge.fix.mcp_client import capture_crash, ensure_server_running, shutdown_server
-from debugbridge.fix.models import AttemptRecord, CrashCapture, FixResult
-from debugbridge.fix.patch_writer import write_failure_report, write_patch
-from debugbridge.fix.worktree import (
+from stackly.fix.mcp_client import capture_crash, ensure_server_running, shutdown_server
+from stackly.fix.models import AttemptRecord, CrashCapture, FixResult
+from stackly.fix.patch_writer import write_failure_report, write_patch
+from stackly.fix.worktree import (
     capture_diff,
     cleanup_worktree_on_failure,
     cleanup_worktree_on_success,
@@ -135,7 +135,7 @@ def _format_summary(result: FixResult, capture: CrashCapture) -> str:
     status = "fix complete" if result.ok else "fix failed"
 
     lines = [
-        f"[debugbridge] {status}",
+        f"[stackly] {status}",
         f"  crash:    {crash_line}",
         f"  patch:    {patch_line}",
         f"  build:    {build_line}",
@@ -159,8 +159,8 @@ def run_handoff(
     """Capture crash, write briefing, launch interactive Claude Code session.
 
     Flow:
-    1. ``ensure_gitignore`` -- add ``.debugbridge/`` to ``.gitignore``.
-    2. ``ensure_server_running`` -- spawn ``debugbridge serve`` if not already up.
+    1. ``ensure_gitignore`` -- add ``.stackly/`` to ``.gitignore``.
+    2. ``ensure_server_running`` -- spawn ``stackly serve`` if not already up.
     3. ``capture_crash`` -- attach to PID via MCP and snapshot crash state.
     4. ``extract_source_snippets`` + ``render_briefing`` + ``write_briefing``
        -- assemble the crash briefing Markdown file.
@@ -178,8 +178,8 @@ def run_handoff(
 
     # 1. Setup
     ensure_gitignore(repo)
-    debugbridge_dir = repo / ".debugbridge"
-    debugbridge_dir.mkdir(parents=True, exist_ok=True)
+    stackly_dir = repo / ".stackly"
+    stackly_dir.mkdir(parents=True, exist_ok=True)
 
     # 2. Server
     ensure_server_running(host, port)
@@ -190,11 +190,11 @@ def run_handoff(
         # 4. Briefing
         snippets = extract_source_snippets(repo, capture.callstack)
         content = render_briefing(capture, snippets, build_cmd=None)
-        briefing_path = debugbridge_dir / "briefings" / f"crash-{capture.crash_hash}.md"
+        briefing_path = stackly_dir / "briefings" / f"crash-{capture.crash_hash}.md"
         write_briefing(briefing_path, content)
 
         # 5. MCP config for Claude
-        mcp_config_path = write_mcp_config(debugbridge_dir, host, port)
+        mcp_config_path = write_mcp_config(stackly_dir, host, port)
 
         # 6. Launch interactive
         briefing_rel = briefing_path.relative_to(repo)
@@ -228,7 +228,7 @@ def run_autonomous(
     Flow:
     1. ``ensure_gitignore`` + ``ensure_server_running``.
     2. ``capture_crash`` via MCP.
-    3. Build briefing, write MCP config + system-append under ``.debugbridge/``.
+    3. Build briefing, write MCP config + system-append under ``.stackly/``.
     4. ``create_worktree`` on a fresh branch.
     5. Copy briefing into worktree so claude can ``@``-reference it.
     6. Loop up to ``max_attempts``:
@@ -249,8 +249,8 @@ def run_autonomous(
 
     # 1. Setup
     ensure_gitignore(repo)
-    debugbridge_dir = repo / ".debugbridge"
-    debugbridge_dir.mkdir(parents=True, exist_ok=True)
+    stackly_dir = repo / ".stackly"
+    stackly_dir.mkdir(parents=True, exist_ok=True)
 
     # 2. Server
     server_proc = ensure_server_running(host, port)
@@ -270,19 +270,19 @@ def run_autonomous(
         # 4. Briefing
         snippets = extract_source_snippets(repo, capture.callstack)
         content = render_briefing(capture, snippets, build_cmd=build_cmd)
-        briefing_path = debugbridge_dir / "briefings" / f"crash-{crash_hash}.md"
+        briefing_path = stackly_dir / "briefings" / f"crash-{crash_hash}.md"
         write_briefing(briefing_path, content)
 
-        # 5. Config files (in repo's .debugbridge/, NOT the worktree)
-        mcp_config_path = write_mcp_config(debugbridge_dir, host, port)
-        system_append_path = write_system_append(debugbridge_dir)
+        # 5. Config files (in repo's .stackly/, NOT the worktree)
+        mcp_config_path = write_mcp_config(stackly_dir, host, port)
+        system_append_path = write_system_append(stackly_dir)
 
         # 6. Worktree
         worktree = create_worktree(repo, crash_hash)
         state.worktree_path = worktree
 
         # Copy briefing into worktree so claude can read it via @path
-        wt_briefing = worktree / ".debugbridge" / "briefings" / f"crash-{crash_hash}.md"
+        wt_briefing = worktree / ".stackly" / "briefings" / f"crash-{crash_hash}.md"
         wt_briefing.parent.mkdir(parents=True, exist_ok=True)
         wt_briefing.write_text(content, encoding="utf-8")
 

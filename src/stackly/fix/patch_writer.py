@@ -1,20 +1,20 @@
-"""Write patch files and failure reports to .debugbridge/patches/ (task 2a.3.3)."""
+"""Write patch files and failure reports to .stackly/patches/ (task 2a.3.3)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from debugbridge.fix.models import AttemptRecord
+from stackly.fix.models import AttemptRecord
 
 
 def _patches_dir(repo: Path) -> Path:
-    d = repo / ".debugbridge" / "patches"
+    d = repo / ".stackly" / "patches"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def write_patch(repo: Path, crash_hash: str, diff: str) -> Path:
-    """Write a unified diff to ``.debugbridge/patches/crash-<hash>.patch``.
+    """Write a unified diff to ``.stackly/patches/crash-<hash>.patch``.
 
     Creates the patches directory (and all parents) if it does not exist.
     All writes use UTF-8 encoding.
@@ -30,7 +30,7 @@ def write_failure_report(
     attempts: list[AttemptRecord],
     final_msg: str,
 ) -> Path:
-    """Write a Markdown failure report to ``.debugbridge/patches/crash-<hash>.failed.md``.
+    """Write a Markdown failure report to ``.stackly/patches/crash-<hash>.failed.md``.
 
     Lists each attempt with its Claude response (truncated to 2K chars),
     build output (truncated to 2K chars), cost, and test results.

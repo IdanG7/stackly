@@ -2,7 +2,7 @@
 
 Provides server lifecycle (spawn/shutdown) and crash capture via MCP.
 
-Server lifecycle (task 2a.1.1): auto-spawns ``debugbridge serve`` if one isn't
+Server lifecycle (task 2a.1.1): auto-spawns ``stackly serve`` if one isn't
 already listening on the requested host:port, then waits for the Streamable-HTTP
 transport to report "Uvicorn running" before returning. Shutdown sends SIGBREAK
 (on Windows) to the process group and falls back to SIGKILL after a grace period.
@@ -13,7 +13,7 @@ and assembles a CrashCapture Pydantic model with crash-hash computed from
 ``worktree.compute_crash_hash``.
 
 Architectural constraint (PLAN.md decision #1): this module does NOT import
-``debugbridge.session``. All debugger-state access goes through MCP.
+``stackly.session``. All debugger-state access goes through MCP.
 """
 
 from __future__ import annotations
@@ -30,8 +30,8 @@ import time
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
-from debugbridge.fix.models import CallFrame, CrashCapture, ExceptionInfo, Local, ThreadInfo
-from debugbridge.fix.worktree import compute_crash_hash
+from stackly.fix.models import CallFrame, CrashCapture, ExceptionInfo, Local, ThreadInfo
+from stackly.fix.worktree import compute_crash_hash
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def ensure_server_running(
     port: int = 8585,
     startup_timeout_s: float = 30.0,
 ) -> subprocess.Popen | None:
-    """Return a Popen if we spawned ``debugbridge serve``; None if one was already up.
+    """Return a Popen if we spawned ``stackly serve``; None if one was already up.
 
     Raises TimeoutError when we do spawn but the server doesn't emit
     ``"Uvicorn running"`` on stdout within ``startup_timeout_s`` seconds.
@@ -69,7 +69,7 @@ def ensure_server_running(
         [
             "uv",
             "run",
-            "debugbridge",
+            "stackly",
             "serve",
             "--host",
             host,
@@ -93,7 +93,7 @@ def ensure_server_running(
             # Either EOF or no output yet. Brief sleep to avoid spinning.
             if proc.poll() is not None:
                 raise TimeoutError(
-                    f"debugbridge serve exited (rc={proc.returncode}) before emitting 'Uvicorn running'"
+                    f"stackly serve exited (rc={proc.returncode}) before emitting 'Uvicorn running'"
                 )
             time.sleep(0.05)
             continue
@@ -103,7 +103,7 @@ def ensure_server_running(
     # Timed out waiting for readiness — shoot the process we spawned before raising.
     _terminate(proc)
     raise TimeoutError(
-        f"debugbridge serve did not become ready on {host}:{port} within {startup_timeout_s:.1f}s"
+        f"stackly serve did not become ready on {host}:{port} within {startup_timeout_s:.1f}s"
     )
 
 
@@ -158,25 +158,25 @@ async def _capture_async(
     mcp_url: str,
     conn_str: str | None = None,
 ) -> CrashCapture:
-    """Connect to a running DebugBridge MCP server and capture crash state.
+    """Connect to a running Stackly MCP server and capture crash state.
 
     Opens a streamablehttp_client connection, verifies we're talking to a real
-    DebugBridge server (R9 mitigation), then drives the attach/inspect tool
+    Stackly server (R9 mitigation), then drives the attach/inspect tool
     sequence and returns a fully-populated CrashCapture.
 
-    Raises RuntimeError if the server is not a DebugBridge instance.
+    Raises RuntimeError if the server is not a Stackly instance.
     """
     async with streamablehttp_client(mcp_url) as (read, write, _session_id):  # noqa: SIM117
         async with ClientSession(read, write) as session:
             await session.initialize()
 
-            # R9 mitigation: verify this is actually a DebugBridge server.
+            # R9 mitigation: verify this is actually a Stackly server.
             tools_result = await session.list_tools()
             tool_names = {t.name for t in tools_result.tools}
             missing = _REQUIRED_TOOLS - tool_names
             if missing:
                 raise RuntimeError(
-                    f"Port is bound by a non-DebugBridge MCP server; "
+                    f"Port is bound by a non-Stackly MCP server; "
                     f"missing tools: {sorted(missing)}. "
                     f"Pass --port N or stop the other process."
                 )
@@ -250,9 +250,9 @@ def capture_crash(
 ) -> CrashCapture:
     """Synchronous wrapper around :func:`_capture_async`.
 
-    Connects to the DebugBridge MCP server at ``mcp_url``, attaches to
+    Connects to the Stackly MCP server at ``mcp_url``, attaches to
     process ``pid``, captures crash state, and returns a :class:`CrashCapture`.
 
-    Raises RuntimeError if the server is not a DebugBridge instance (R9).
+    Raises RuntimeError if the server is not a Stackly instance (R9).
     """
     return asyncio.run(_capture_async(pid, mcp_url, conn_str))

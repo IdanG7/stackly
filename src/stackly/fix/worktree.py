@@ -13,7 +13,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from debugbridge.fix.models import CrashCapture
+from stackly.fix.models import CrashCapture
 
 __all__ = [
     "capture_diff",
@@ -26,7 +26,7 @@ __all__ = [
     "is_git_repo",
 ]
 
-_GITIGNORE_ENTRY = "/.debugbridge/"
+_GITIGNORE_ENTRY = "/.stackly/"
 
 
 def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -68,10 +68,10 @@ def detect_dirty(path: Path) -> bool:
 
 
 def ensure_gitignore(repo: Path) -> None:
-    """Idempotently add ``/.debugbridge/`` to ``repo / '.gitignore'``.
+    """Idempotently add ``/.stackly/`` to ``repo / '.gitignore'``.
 
     Creates the file if missing. Does nothing if the entry is already present
-    (matching either ``/.debugbridge/`` or ``.debugbridge/`` so we don't
+    (matching either ``/.stackly/`` or ``.stackly/`` so we don't
     duplicate a pre-existing user entry in a different form).
     """
     gitignore = repo / ".gitignore"
@@ -83,7 +83,7 @@ def ensure_gitignore(repo: Path) -> None:
     # Check for either form of the entry as a whole line.
     lines = existing.splitlines()
     already = any(
-        line.strip() in ("/.debugbridge/", ".debugbridge/", "/.debugbridge", ".debugbridge")
+        line.strip() in ("/.stackly/", ".stackly/", "/.stackly", ".stackly")
         for line in lines
     )
     if already:
@@ -117,15 +117,15 @@ def compute_crash_hash(capture: CrashCapture) -> str:
 
 
 def _worktree_path(repo: Path, crash_hash: str) -> Path:
-    return repo / ".debugbridge" / f"wt-{crash_hash}"
+    return repo / ".stackly" / f"wt-{crash_hash}"
 
 
 def _branch_name(crash_hash: str) -> str:
-    return f"debugbridge/fix-{crash_hash}"
+    return f"stackly/fix-{crash_hash}"
 
 
 def create_worktree(repo: Path, crash_hash: str) -> Path:
-    """Create ``.debugbridge/wt-<hash>/`` as a git worktree on a fresh branch.
+    """Create ``.stackly/wt-<hash>/`` as a git worktree on a fresh branch.
 
     If a worktree or branch with the same hash already exists (half-cleaned
     from a prior run), they are removed first — same hash always yields a

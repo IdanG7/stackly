@@ -1,13 +1,13 @@
-"""DebugSession — the only module in DebugBridge allowed to touch pybag.
+"""DebugSession — the only module in Stackly allowed to touch pybag.
 
 All MCP tools funnel through a single ``DebugSession`` instance. The session
 serializes DbgEng access with a lock (COM is single-threaded), converts pybag's
 raw structures to Pydantic models, and keeps pybag's imports deferred so the
-rest of DebugBridge can load without Windows Debugging Tools installed.
+rest of Stackly can load without Windows Debugging Tools installed.
 
 Why pybag imports are lazy: ``pybag/__init__.py`` tries to load ``dbgeng.dll``
 at import time and raises ``FileNotFoundError`` when the DLL is missing. If a
-user runs ``debugbridge doctor`` without Debugging Tools installed, we want a
+user runs ``stackly doctor`` without Debugging Tools installed, we want a
 friendly diagnostic — not a stack trace from deep inside ``ctypes``.
 
 Why we use WinDbg commands (``k``, ``.lastevent``, ``.exr -1``) for some data:
@@ -24,7 +24,7 @@ import re
 import threading
 from typing import TYPE_CHECKING, Any
 
-from debugbridge.models import (
+from stackly.models import (
     AttachResult,
     Breakpoint,
     CallFrame,
@@ -105,7 +105,7 @@ _EXR_ADDR_RE = re.compile(r"ExceptionAddress:\s+([0-9a-fA-F`]+)")
 class DebugSession:
     """Serializes all DbgEng access behind a single lock.
 
-    One session per DebugBridge server process. Re-attaching replaces the
+    One session per Stackly server process. Re-attaching replaces the
     underlying pybag instance. ``close()`` detaches cleanly.
     """
 
@@ -119,8 +119,8 @@ class DebugSession:
 
     def _make_userdbg(self) -> UserDbg:
         """Lazy import + construct a new UserDbg. Safe to call only from inside the lock."""
-        # Deferred so `import debugbridge.session` works without Debugging Tools.
-        from debugbridge.env import ensure_dbgeng_on_path
+        # Deferred so `import stackly.session` works without Debugging Tools.
+        from stackly.env import ensure_dbgeng_on_path
 
         ensure_dbgeng_on_path()
 

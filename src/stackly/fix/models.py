@@ -1,8 +1,8 @@
 """Pydantic types for the fix-loop subpackage.
 
-These models are the wire contract between the CLI (`debugbridge fix`), the
+These models are the wire contract between the CLI (`stackly fix`), the
 crash-capture step (via MCP), the claude subprocess wrapper, and the on-disk
-artifacts written under ``.debugbridge/``. Do not add fields to
+artifacts written under ``.stackly/``. Do not add fields to
 :class:`AttemptRecord` in later tasks — the schema is final here.
 """
 
@@ -14,7 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 # Re-export Phase 1 models so fix/ has a single import site.
-from debugbridge.models import CallFrame, ExceptionInfo, Local, ThreadInfo
+from stackly.models import CallFrame, ExceptionInfo, Local, ThreadInfo
 
 __all__ = [
     "AttemptRecord",
@@ -31,7 +31,7 @@ __all__ = [
 class CrashCapture(BaseModel):
     """Snapshot of debugger state taken once, just after attach.
 
-    All MCP round-trips happen during :func:`debugbridge.fix.mcp_client.capture_crash`
+    All MCP round-trips happen during :func:`stackly.fix.mcp_client.capture_crash`
     (task 2a.1.2); after that the briefing generator and dispatcher work off this
     single immutable object.
     """
@@ -98,7 +98,7 @@ class AttemptRecord(BaseModel):
 
 
 class FixResult(BaseModel):
-    """Final outcome of a ``debugbridge fix`` invocation."""
+    """Final outcome of a ``stackly fix`` invocation."""
 
     ok: bool
     mode: Literal["handoff", "auto"]

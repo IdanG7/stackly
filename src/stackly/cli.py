@@ -1,7 +1,7 @@
-"""Typer CLI for DebugBridge.
+"""Typer CLI for Stackly.
 
 Kept intentionally free of pybag / session imports at module load time so that
-``debugbridge doctor`` and ``debugbridge version`` work on a machine without
+``stackly doctor`` and ``stackly version`` work on a machine without
 Windows Debugging Tools installed. The server is only imported inside ``serve``.
 """
 
@@ -13,15 +13,15 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from debugbridge import __version__
-from debugbridge.env import (
+from stackly import __version__
+from stackly.env import (
     check_claude_bypass_acknowledged,
     check_claude_cli,
     check_debugging_tools,
 )
 
 app = typer.Typer(
-    name="debugbridge",
+    name="stackly",
     help="Remote crash capture MCP server for native Windows applications.",
     add_completion=False,
     no_args_is_help=True,
@@ -44,7 +44,7 @@ def serve(
         False, "--skip-env-check", help="Start even if Debugging Tools look absent (debug use)."
     ),
 ) -> None:
-    """Start the DebugBridge MCP server."""
+    """Start the Stackly MCP server."""
     if transport not in ("http", "stdio"):
         console.print(f"[red]Invalid transport: {transport}. Use 'http' or 'stdio'.[/red]")
         raise typer.Exit(code=2)
@@ -60,14 +60,14 @@ def serve(
             raise typer.Exit(code=1)
 
     # Deferred import — loads pybag, which requires dbgeng.dll.
-    from debugbridge.server import run
+    from stackly.server import run
 
     if transport == "http":
         console.print(
-            f"[green]DebugBridge[/green] serving on [bold]http://{host}:{port}/mcp[/bold]"
+            f"[green]Stackly[/green] serving on [bold]http://{host}:{port}/mcp[/bold]"
         )
     else:
-        console.print("[green]DebugBridge[/green] serving on stdio")
+        console.print("[green]Stackly[/green] serving on stdio")
     run(transport=transport, host=host, port=port)  # type: ignore[arg-type]
 
 
@@ -78,7 +78,7 @@ def doctor() -> None:
     claude_result = check_claude_cli()
     bypass_result = check_claude_bypass_acknowledged()
 
-    table = Table(title="DebugBridge environment check", show_header=True)
+    table = Table(title="Stackly environment check", show_header=True)
     table.add_column("Component")
     table.add_column("Status")
     table.add_column("Path")
@@ -163,7 +163,7 @@ def fix(
     import shutil
     from pathlib import Path
 
-    from debugbridge.fix.worktree import is_git_repo
+    from stackly.fix.worktree import is_git_repo
 
     repo_path = Path(repo).resolve()
 
@@ -172,12 +172,12 @@ def fix(
         raise typer.Exit(code=1)
 
     if not shutil.which("claude"):
-        console.print("[red]Error:[/red] claude CLI not found on PATH. Run `debugbridge doctor`.")
+        console.print("[red]Error:[/red] claude CLI not found on PATH. Run `stackly doctor`.")
         raise typer.Exit(code=1)
 
     # Lazy import -- don't load fix/ until actually needed to preserve
     # the Phase 1 invariant that cli.py loads without pybag.
-    from debugbridge.fix.dispatcher import run_autonomous, run_handoff
+    from stackly.fix.dispatcher import run_autonomous, run_handoff
 
     if auto:
         result = run_autonomous(
@@ -206,8 +206,8 @@ def fix(
 
 @app.command()
 def version() -> None:
-    """Print DebugBridge's version and exit."""
-    console.print(f"debugbridge {__version__}")
+    """Print Stackly's version and exit."""
+    console.print(f"stackly {__version__}")
 
 
 def main() -> None:

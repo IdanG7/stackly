@@ -1,7 +1,7 @@
 """Pydantic types returned by MCP tools.
 
-These are the wire contract between MCP clients and DebugBridge. Tools in
-``debugbridge.tools`` must not invent ad-hoc dicts — every return value goes
+These are the wire contract between MCP clients and Stackly. Tools in
+``stackly.tools`` must not invent ad-hoc dicts — every return value goes
 through one of these models so FastMCP can serialize it predictably.
 """
 
