@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from debugbridge.fix.models import (
+from stackly.fix.models import (
     AttemptRecord,
     ClaudeRunResult,
     CrashCapture,
     FixResult,
 )
-from debugbridge.models import CallFrame, ExceptionInfo, Local, ThreadInfo
+from stackly.models import CallFrame, ExceptionInfo, Local, ThreadInfo
 
 
 def test_crash_capture_round_trip() -> None:
@@ -135,13 +135,13 @@ def test_fix_result_round_trip_both_modes() -> None:
         ok=True,
         mode="auto",
         crash_hash="abc12345",
-        patch_path=Path(".debugbridge/patches/crash-abc12345.patch"),
+        patch_path=Path(".stackly/patches/crash-abc12345.patch"),
         failure_report_path=None,
         attempts=[],
         total_cost_usd=0.18,
         total_input_tokens=18500,
         total_output_tokens=2100,
-        worktree_path=Path(".debugbridge/wt-abc12345"),
+        worktree_path=Path(".stackly/wt-abc12345"),
         worktree_preserved=False,
     )
     restored_a = FixResult.model_validate(auto.model_dump(mode="json"))
@@ -156,11 +156,11 @@ def test_fix_models_import_without_pybag_or_mcp() -> None:
     """
     import sys
 
-    import debugbridge.fix
-    import debugbridge.fix.models
+    import stackly.fix
+    import stackly.fix.models
 
     # Touch the modules so the imports aren't pruned and to prove they load.
-    assert debugbridge.fix is not None
-    assert debugbridge.fix.models is not None
+    assert stackly.fix is not None
+    assert stackly.fix.models is not None
     # Verify nothing pulled in pybag.
     assert "pybag" not in sys.modules

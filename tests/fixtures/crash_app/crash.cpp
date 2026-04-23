@@ -1,4 +1,4 @@
-// Deterministic crash fixture for DebugBridge integration tests.
+// Deterministic crash fixture for Stackly integration tests.
 //
 // Argv selects the crash mode:
 //   crash_app.exe null   -> null pointer dereference  (EXCEPTION_ACCESS_VIOLATION)

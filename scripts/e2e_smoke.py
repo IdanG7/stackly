@@ -1,7 +1,7 @@
-"""End-to-end smoke test against a running DebugBridge MCP server.
+"""End-to-end smoke test against a running Stackly MCP server.
 
 Launches:
-  1. debugbridge serve (HTTP on 127.0.0.1:8585)
+  1. stackly serve (HTTP on 127.0.0.1:8585)
   2. crash_app.exe wait (blocks on stdin)
 
 Then connects as an MCP client, calls list_tools, attach_process, get_threads,
@@ -36,10 +36,10 @@ def log(msg: str) -> None:
 
 @asynccontextmanager
 async def spawn_server():
-    """Run `debugbridge serve` in a subprocess and wait for it to be ready."""
-    log("starting debugbridge serve …")
+    """Run `stackly serve` in a subprocess and wait for it to be ready."""
+    log("starting stackly serve …")
     proc = subprocess.Popen(
-        ["uv", "run", "debugbridge", "serve", "--port", "8585"],
+        ["uv", "run", "stackly", "serve", "--port", "8585"],
         cwd=str(ROOT),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -62,7 +62,7 @@ async def spawn_server():
             raise TimeoutError("server did not start within 30s")
         yield proc
     finally:
-        log("stopping debugbridge serve …")
+        log("stopping stackly serve …")
         if os.name == "nt":
             proc.send_signal(signal.CTRL_BREAK_EVENT)
         else:

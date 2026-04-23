@@ -20,7 +20,7 @@ import subprocess
 
 import pytest
 
-from debugbridge.session import DebugSession, DebugSessionError
+from stackly.session import DebugSession, DebugSessionError
 
 
 @pytest.mark.integration
@@ -77,10 +77,10 @@ def test_catch_null_deref_crash_via_create(crash_app_path) -> None:
     attach → run → crash → get_exception → get_callstack.
 
     We reach through to pybag's ``UserDbg.create()`` directly here because
-    DebugBridge's public API is about attaching to existing processes; creating
+    Stackly's public API is about attaching to existing processes; creating
     under debugger control is test-only.
     """
-    from debugbridge.env import ensure_dbgeng_on_path
+    from stackly.env import ensure_dbgeng_on_path
 
     ensure_dbgeng_on_path()
     from pybag.userdbg import UserDbg

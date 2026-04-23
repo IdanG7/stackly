@@ -5,8 +5,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from debugbridge.fix.models import CrashCapture
-from debugbridge.fix.worktree import (
+from stackly.fix.models import CrashCapture
+from stackly.fix.worktree import (
     capture_diff,
     cleanup_worktree_on_failure,
     cleanup_worktree_on_success,
@@ -16,7 +16,7 @@ from debugbridge.fix.worktree import (
     ensure_gitignore,
     is_git_repo,
 )
-from debugbridge.models import CallFrame, ExceptionInfo
+from stackly.models import CallFrame, ExceptionInfo
 
 
 def _init_git_repo(path: Path) -> None:
@@ -57,8 +57,8 @@ def test_ensure_gitignore_appends_entry_when_missing(tmp_path: Path) -> None:
 
     # Pre-existing content preserved.
     assert "node_modules/" in content
-    # Debugbridge entry added (accept either "/.debugbridge/" or ".debugbridge/").
-    assert "/.debugbridge/" in content or ".debugbridge/" in content
+    # Debugbridge entry added (accept either "/.stackly/" or ".stackly/").
+    assert "/.stackly/" in content or ".stackly/" in content
 
 
 def test_ensure_gitignore_is_idempotent(tmp_path: Path) -> None:
@@ -83,18 +83,18 @@ def test_ensure_gitignore_creates_file_when_missing(tmp_path: Path) -> None:
     assert gitignore.exists()
     content = gitignore.read_text(encoding="utf-8")
     # Exactly one entry — no stray blank lines or duplicates.
-    assert content.count(".debugbridge") == 1
+    assert content.count(".stackly") == 1
 
 
 def test_ensure_gitignore_detects_existing_dotprefixed_entry(tmp_path: Path) -> None:
-    """If .gitignore already contains '/.debugbridge/', don't double-add."""
+    """If .gitignore already contains '/.stackly/', don't double-add."""
     _init_git_repo(tmp_path)
     gitignore = tmp_path / ".gitignore"
-    gitignore.write_text("/.debugbridge/\n", encoding="utf-8")
+    gitignore.write_text("/.stackly/\n", encoding="utf-8")
 
     ensure_gitignore(tmp_path)
     content = gitignore.read_text(encoding="utf-8")
-    assert content.count(".debugbridge") == 1
+    assert content.count(".stackly") == 1
 
 
 # --- Task 2a.3.1 tests (crash-hash + worktree lifecycle) ---
@@ -172,24 +172,24 @@ def test_compute_crash_hash_degenerate_differs_from_populated() -> None:
 
 
 def test_create_worktree_creates_branch_and_directory(tmp_path: Path) -> None:
-    """create_worktree adds a git worktree under .debugbridge/wt-<hash>/ on a new branch."""
+    """create_worktree adds a git worktree under .stackly/wt-<hash>/ on a new branch."""
     _init_git_repo(tmp_path)
     hash_ = "a1b2c3d4"
     wt = create_worktree(tmp_path, hash_)
 
     # Worktree path location
-    assert wt == tmp_path / ".debugbridge" / f"wt-{hash_}"
+    assert wt == tmp_path / ".stackly" / f"wt-{hash_}"
     assert wt.exists()
     assert (wt / ".git").exists() or (wt / ".git").is_file()  # Git worktree marker file
 
     # Branch was created
     branch_check = subprocess.run(
-        ["git", "-C", str(tmp_path), "branch", "--list", f"debugbridge/fix-{hash_}"],
+        ["git", "-C", str(tmp_path), "branch", "--list", f"stackly/fix-{hash_}"],
         capture_output=True,
         text=True,
         check=True,
     )
-    assert f"debugbridge/fix-{hash_}" in branch_check.stdout
+    assert f"stackly/fix-{hash_}" in branch_check.stdout
 
 
 def test_create_worktree_cleans_up_stale_same_hash(tmp_path: Path) -> None:
@@ -237,12 +237,12 @@ def test_cleanup_worktree_on_success_removes_worktree_and_branch(tmp_path: Path)
 
     # Branch should also be removed
     branches = subprocess.run(
-        ["git", "-C", str(tmp_path), "branch", "--list", f"debugbridge/fix-{hash_}"],
+        ["git", "-C", str(tmp_path), "branch", "--list", f"stackly/fix-{hash_}"],
         capture_output=True,
         text=True,
         check=True,
     )
-    assert f"debugbridge/fix-{hash_}" not in branches.stdout
+    assert f"stackly/fix-{hash_}" not in branches.stdout
 
 
 def test_cleanup_worktree_on_failure_preserves_worktree(tmp_path: Path) -> None:

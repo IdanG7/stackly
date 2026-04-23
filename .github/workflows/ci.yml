@@ -22,9 +22,9 @@ jobs:
       - name: Enforce fix/ coupling rule
         shell: bash
         run: |
-          if grep -rq "from debugbridge\.session" src/debugbridge/fix; then
-            echo "ERROR: fix/ must not import from debugbridge.session"
-            grep -rn "from debugbridge\.session" src/debugbridge/fix
+          if grep -rq "from stackly\.session" src/stackly/fix; then
+            echo "ERROR: fix/ must not import from stackly.session"
+            grep -rn "from stackly\.session" src/stackly/fix
             exit 1
           fi
 

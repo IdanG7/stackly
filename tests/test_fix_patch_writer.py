@@ -1,9 +1,9 @@
-"""Tests for debugbridge.fix.patch_writer (task 2a.3.3)."""
+"""Tests for stackly.fix.patch_writer (task 2a.3.3)."""
 
 from __future__ import annotations
 
-from debugbridge.fix.models import AttemptRecord, ClaudeRunResult
-from debugbridge.fix.patch_writer import write_failure_report, write_patch
+from stackly.fix.models import AttemptRecord, ClaudeRunResult
+from stackly.fix.patch_writer import write_failure_report, write_patch
 
 
 def _stub_claude_result(**overrides: object) -> ClaudeRunResult:
@@ -44,7 +44,7 @@ def test_write_patch_round_trip(tmp_path):
     diff = "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n"
     result = write_patch(tmp_path, "a1b2c3d4", diff)
 
-    expected = tmp_path / ".debugbridge" / "patches" / "crash-a1b2c3d4.patch"
+    expected = tmp_path / ".stackly" / "patches" / "crash-a1b2c3d4.patch"
     assert result == expected
     assert expected.exists()
     assert expected.read_text(encoding="utf-8") == diff
@@ -57,7 +57,7 @@ def test_write_failure_report(tmp_path):
     ]
     result = write_failure_report(tmp_path, "a1b2c3d4", attempts=attempts, final_msg="gave up")
 
-    expected = tmp_path / ".debugbridge" / "patches" / "crash-a1b2c3d4.failed.md"
+    expected = tmp_path / ".stackly" / "patches" / "crash-a1b2c3d4.failed.md"
     assert result == expected
     assert expected.exists()
 
@@ -78,7 +78,7 @@ def test_write_patch_creates_directories(tmp_path):
     diff = "diff --git a/y b/y\n"
     result = write_patch(deep_repo, "deadbeef", diff)
 
-    expected = deep_repo / ".debugbridge" / "patches" / "crash-deadbeef.patch"
+    expected = deep_repo / ".stackly" / "patches" / "crash-deadbeef.patch"
     assert result == expected
     assert expected.exists()
     assert expected.read_text(encoding="utf-8") == diff

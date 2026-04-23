@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from debugbridge.fix.models import AttemptRecord, ClaudeRunResult, CrashCapture, FixResult
-from debugbridge.models import CallFrame, ExceptionInfo
+from stackly.fix.models import AttemptRecord, ClaudeRunResult, CrashCapture, FixResult
+from stackly.models import CallFrame, ExceptionInfo
 
 
 @pytest.fixture()
@@ -76,8 +76,8 @@ def test_handoff_writes_briefing_and_invokes_claude_with_correct_args(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """run_handoff must:
-    1. Write briefing to .debugbridge/briefings/crash-<hash>.md
-    2. Write mcp-config to .debugbridge/mcp-config.json
+    1. Write briefing to .stackly/briefings/crash-<hash>.md
+    2. Write mcp-config to .stackly/mcp-config.json
     3. Invoke claude with --mcp-config, --strict-mcp-config, and a positional
        message referencing the briefing via @path.
     4. Return FixResult(ok=True, mode="handoff", crash_hash=...).
@@ -86,13 +86,13 @@ def test_handoff_writes_briefing_and_invokes_claude_with_correct_args(
 
     # Monkeypatch capture_crash to return canned data without MCP.
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.capture_crash",
+        "stackly.fix.dispatcher.capture_crash",
         lambda pid, mcp_url, conn_str=None: canned,
     )
 
     # Monkeypatch ensure_server_running to no-op (returns None = server was already up).
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.ensure_server_running",
+        "stackly.fix.dispatcher.ensure_server_running",
         lambda host="127.0.0.1", port=8585, startup_timeout_s=30.0: None,
     )
 
@@ -108,9 +108,9 @@ def test_handoff_writes_briefing_and_invokes_claude_with_correct_args(
             return subprocess.CompletedProcess(args=cmd, returncode=0)
         return original_run(*args, **kwargs)
 
-    monkeypatch.setattr("debugbridge.fix.claude_runner.subprocess.run", fake_subprocess_run)
+    monkeypatch.setattr("stackly.fix.claude_runner.subprocess.run", fake_subprocess_run)
 
-    from debugbridge.fix.dispatcher import run_handoff
+    from stackly.fix.dispatcher import run_handoff
 
     result = run_handoff(
         repo=git_repo,
@@ -120,13 +120,13 @@ def test_handoff_writes_briefing_and_invokes_claude_with_correct_args(
     )
 
     # 1. Briefing file exists at the expected path.
-    briefing_path = git_repo / ".debugbridge" / "briefings" / f"crash-{canned.crash_hash}.md"
+    briefing_path = git_repo / ".stackly" / "briefings" / f"crash-{canned.crash_hash}.md"
     assert briefing_path.exists(), f"Briefing not found at {briefing_path}"
     briefing_content = briefing_path.read_text(encoding="utf-8")
     assert "crash-a1b2c3d4" in briefing_content
 
     # 2. MCP config exists.
-    mcp_config_path = git_repo / ".debugbridge" / "mcp-config.json"
+    mcp_config_path = git_repo / ".stackly" / "mcp-config.json"
     assert mcp_config_path.exists(), f"MCP config not found at {mcp_config_path}"
 
     # 3. Claude was invoked with the right args.
@@ -137,8 +137,8 @@ def test_handoff_writes_briefing_and_invokes_claude_with_correct_args(
     assert "--strict-mcp-config" in argv, f"--strict-mcp-config not in argv: {argv}"
     # The positional message must reference the briefing via @path.
     positional_msg = argv[-1]
-    assert "@.debugbridge/briefings/crash-" in positional_msg, (
-        f"Positional message must contain @.debugbridge/briefings/crash-: {positional_msg}"
+    assert "@.stackly/briefings/crash-" in positional_msg, (
+        f"Positional message must contain @.stackly/briefings/crash-: {positional_msg}"
     )
 
     # 4. FixResult shape.
@@ -175,37 +175,37 @@ def _patch_autonomous_deps(monkeypatch: pytest.MonkeyPatch, build_ok: bool = Tru
 
     # capture_crash — return canned capture without MCP
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.capture_crash",
+        "stackly.fix.dispatcher.capture_crash",
         lambda pid, mcp_url, conn_str=None: canned,
     )
 
     # ensure_server_running — no-op, return None (server already up)
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.ensure_server_running",
+        "stackly.fix.dispatcher.ensure_server_running",
         lambda host="127.0.0.1", port=8585, startup_timeout_s=30.0: None,
     )
 
     # shutdown_server — no-op
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.shutdown_server",
+        "stackly.fix.dispatcher.shutdown_server",
         lambda proc, grace_s=5.0: None,
     )
 
     # run_claude_headless — return canned success result
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.run_claude_headless",
+        "stackly.fix.dispatcher.run_claude_headless",
         lambda **kwargs: _canned_claude_result(ok=True),
     )
 
     # run_command — return build_ok
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.run_command",
+        "stackly.fix.dispatcher.run_command",
         lambda cmd, cwd, timeout=600: (build_ok, "build ok" if build_ok else "build error"),
     )
 
     # capture_diff — return a fake diff
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.capture_diff",
+        "stackly.fix.dispatcher.capture_diff",
         lambda worktree: (
             "diff --git a/foo.c b/foo.c\n--- a/foo.c\n+++ b/foo.c\n@@ -1 +1 @@\n-bad\n+good\n"
         ),
@@ -213,26 +213,26 @@ def _patch_autonomous_deps(monkeypatch: pytest.MonkeyPatch, build_ok: bool = Tru
 
     # create_worktree — create a real subdirectory (skip git worktree add)
     def fake_create_worktree(repo: Path, crash_hash: str) -> Path:
-        wt = repo / ".debugbridge" / f"wt-{crash_hash}"
+        wt = repo / ".stackly" / f"wt-{crash_hash}"
         wt.mkdir(parents=True, exist_ok=True)
         # Make it look like a git repo for build_runner etc.
         (wt / ".git").write_text("gitdir: fake", encoding="utf-8")
         return wt
 
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.create_worktree",
+        "stackly.fix.dispatcher.create_worktree",
         fake_create_worktree,
     )
 
     # cleanup_worktree_on_success — just remove the directory
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.cleanup_worktree_on_success",
+        "stackly.fix.dispatcher.cleanup_worktree_on_success",
         lambda repo, worktree, crash_hash: None,
     )
 
     # cleanup_worktree_on_failure — no-op (preserve worktree)
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.cleanup_worktree_on_failure",
+        "stackly.fix.dispatcher.cleanup_worktree_on_failure",
         lambda repo, worktree, crash_hash: None,
     )
 
@@ -244,7 +244,7 @@ def test_auto_loop_single_attempt_success(
     """run_autonomous: single attempt succeeds → ok=True, 1 attempt, patch written."""
     _patch_autonomous_deps(monkeypatch, build_ok=True)
 
-    from debugbridge.fix.dispatcher import run_autonomous
+    from stackly.fix.dispatcher import run_autonomous
 
     result = run_autonomous(
         repo=git_repo,
@@ -261,8 +261,8 @@ def test_auto_loop_single_attempt_success(
     assert result.attempts[0].build_ok is True
     assert result.crash_hash == "a1b2c3d4"
 
-    # Patch file must exist under .debugbridge/patches/
-    patch_path = git_repo / ".debugbridge" / "patches" / "crash-a1b2c3d4.patch"
+    # Patch file must exist under .stackly/patches/
+    patch_path = git_repo / ".stackly" / "patches" / "crash-a1b2c3d4.patch"
     assert patch_path.exists(), f"Patch file not found at {patch_path}"
     assert "diff --git" in patch_path.read_text(encoding="utf-8")
 
@@ -278,7 +278,7 @@ def test_auto_loop_build_failure_exhausts_attempts(
     """run_autonomous: build always fails, max_attempts=1 → ok=False, failure report."""
     _patch_autonomous_deps(monkeypatch, build_ok=False)
 
-    from debugbridge.fix.dispatcher import run_autonomous
+    from stackly.fix.dispatcher import run_autonomous
 
     result = run_autonomous(
         repo=git_repo,
@@ -296,7 +296,7 @@ def test_auto_loop_build_failure_exhausts_attempts(
     assert result.crash_hash == "a1b2c3d4"
 
     # Failure report must exist
-    fail_path = git_repo / ".debugbridge" / "patches" / "crash-a1b2c3d4.failed.md"
+    fail_path = git_repo / ".stackly" / "patches" / "crash-a1b2c3d4.failed.md"
     assert fail_path.exists(), f"Failure report not found at {fail_path}"
     assert result.failure_report_path is not None
 
@@ -305,19 +305,19 @@ def test_auto_loop_does_not_touch_main_tree(
     git_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """run_autonomous must never modify files outside .debugbridge/ in the repo."""
+    """run_autonomous must never modify files outside .stackly/ in the repo."""
     _patch_autonomous_deps(monkeypatch, build_ok=True)
 
     # Create a sentinel file in the repo root
     sentinel = git_repo / "SENTINEL.txt"
     sentinel.write_text("DO NOT TOUCH", encoding="utf-8")
 
-    # Record initial state of the repo root (excluding .debugbridge)
+    # Record initial state of the repo root (excluding .stackly)
     initial_files = {
-        f.name for f in git_repo.iterdir() if f.name not in (".git", ".debugbridge", ".gitignore")
+        f.name for f in git_repo.iterdir() if f.name not in (".git", ".stackly", ".gitignore")
     }
 
-    from debugbridge.fix.dispatcher import run_autonomous
+    from stackly.fix.dispatcher import run_autonomous
 
     result = run_autonomous(
         repo=git_repo,
@@ -334,9 +334,9 @@ def test_auto_loop_does_not_touch_main_tree(
     assert sentinel.exists(), "SENTINEL.txt was deleted"
     assert sentinel.read_text(encoding="utf-8") == "DO NOT TOUCH", "SENTINEL.txt was modified"
 
-    # No new files in repo root outside .debugbridge/ and .gitignore
+    # No new files in repo root outside .stackly/ and .gitignore
     final_files = {
-        f.name for f in git_repo.iterdir() if f.name not in (".git", ".debugbridge", ".gitignore")
+        f.name for f in git_repo.iterdir() if f.name not in (".git", ".stackly", ".gitignore")
     }
     assert final_files == initial_files, (
         f"New files appeared in repo root: {final_files - initial_files}"
@@ -370,7 +370,7 @@ def test_auto_loop_retries_on_build_failure_with_appended_output(
         return (True, "build ok")
 
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.run_command",
+        "stackly.fix.dispatcher.run_command",
         fake_run_command,
     )
 
@@ -384,11 +384,11 @@ def test_auto_loop_retries_on_build_failure_with_appended_output(
         return _canned_claude_result(ok=True)
 
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.run_claude_headless",
+        "stackly.fix.dispatcher.run_claude_headless",
         fake_claude_headless,
     )
 
-    from debugbridge.fix.dispatcher import run_autonomous
+    from stackly.fix.dispatcher import run_autonomous
 
     result = run_autonomous(
         repo=git_repo,
@@ -430,11 +430,11 @@ def test_auto_loop_runs_test_cmd_after_build(
         return (True, "ok")
 
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.run_command",
+        "stackly.fix.dispatcher.run_command",
         fake_run_command,
     )
 
-    from debugbridge.fix.dispatcher import run_autonomous
+    from stackly.fix.dispatcher import run_autonomous
 
     result = run_autonomous(
         repo=git_repo,
@@ -477,7 +477,7 @@ def test_auto_loop_test_failure_triggers_retry(
         return (True, "tests ok")
 
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.run_command",
+        "stackly.fix.dispatcher.run_command",
         fake_run_command,
     )
 
@@ -491,11 +491,11 @@ def test_auto_loop_test_failure_triggers_retry(
         return _canned_claude_result(ok=True)
 
     monkeypatch.setattr(
-        "debugbridge.fix.dispatcher.run_claude_headless",
+        "stackly.fix.dispatcher.run_claude_headless",
         fake_claude_headless,
     )
 
-    from debugbridge.fix.dispatcher import run_autonomous
+    from stackly.fix.dispatcher import run_autonomous
 
     result = run_autonomous(
         repo=git_repo,
@@ -526,7 +526,7 @@ def test_sigint_handler_terminates_claude_and_preserves_worktree(
     """Signal handler terminates claude subprocess and preserves worktree."""
     from unittest.mock import MagicMock
 
-    from debugbridge.fix.dispatcher import _FixState, _install_signal_handlers
+    from stackly.fix.dispatcher import _FixState, _install_signal_handlers
 
     # Create a fake worktree directory
     wt = tmp_path / "wt-test"
@@ -570,7 +570,7 @@ def test_sigint_handler_is_idempotent(
     """Calling the handler twice should not double-terminate."""
     from unittest.mock import MagicMock
 
-    from debugbridge.fix.dispatcher import _FixState, _install_signal_handlers
+    from stackly.fix.dispatcher import _FixState, _install_signal_handlers
 
     mock_claude = MagicMock()
     mock_claude.poll.return_value = None
@@ -661,14 +661,14 @@ def test_fix_result_aggregates_cost_across_attempts() -> None:
 
 def test_format_summary_contains_expected_fields() -> None:
     """_format_summary must produce a text block with crash, patch, cost, etc."""
-    from debugbridge.fix.dispatcher import _format_summary
+    from stackly.fix.dispatcher import _format_summary
 
     capture = _canned_capture()
     result = FixResult(
         ok=True,
         mode="auto",
         crash_hash="a1b2c3d4",
-        patch_path=Path(".debugbridge/patches/crash-a1b2c3d4.patch"),
+        patch_path=Path(".stackly/patches/crash-a1b2c3d4.patch"),
         attempts=[
             AttemptRecord(
                 attempt=1,

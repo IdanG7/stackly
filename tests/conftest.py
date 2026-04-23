@@ -20,7 +20,7 @@ import pytest
 
 # Prepend the Debugging Tools path BEFORE any test imports pybag.
 # Tests that touch pybag (integration tests) assume this already happened.
-from debugbridge.env import check_debugging_tools, ensure_dbgeng_on_path
+from stackly.env import check_debugging_tools, ensure_dbgeng_on_path
 
 _CRASH_APP = Path(__file__).parent / "fixtures" / "crash_app" / "build" / "Debug" / "crash_app.exe"
 
@@ -33,7 +33,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             f"crash_app not built at {_CRASH_APP}. Run tests/fixtures/crash_app/build.ps1."
         )
     elif not check_debugging_tools().ok:
-        skip_reason = "Windows Debugging Tools not installed (run `debugbridge doctor`)."
+        skip_reason = "Windows Debugging Tools not installed (run `stackly doctor`)."
 
     if skip_reason is None:
         ensure_dbgeng_on_path()

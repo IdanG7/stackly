@@ -1,4 +1,4 @@
-"""Tests for the `debugbridge fix` CLI command (task 2a.4.1).
+"""Tests for the `stackly fix` CLI command (task 2a.4.1).
 
 Uses typer.testing.CliRunner to exercise the fix command without launching
 a real process or claude session.
@@ -10,7 +10,7 @@ import re
 
 from typer.testing import CliRunner
 
-from debugbridge.cli import app
+from stackly.cli import app
 
 runner = CliRunner()
 

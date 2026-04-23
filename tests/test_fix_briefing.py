@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from debugbridge.fix.briefing import extract_source_snippets, render_briefing, write_briefing
-from debugbridge.fix.models import CallFrame, CrashCapture, ExceptionInfo, Local
+from stackly.fix.briefing import extract_source_snippets, render_briefing, write_briefing
+from stackly.fix.models import CallFrame, CrashCapture, ExceptionInfo, Local
 
 
 def _frame(file: str | None, line: int | None, function: str = "f") -> CallFrame:

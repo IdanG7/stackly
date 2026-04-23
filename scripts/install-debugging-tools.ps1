@@ -29,14 +29,14 @@ function Add-ToUserPath {
     }
 }
 
-Write-Host "=== DebugBridge: Windows Debugging Tools installer ===" -ForegroundColor Cyan
+Write-Host "=== Stackly: Windows Debugging Tools installer ===" -ForegroundColor Cyan
 Write-Host ""
 
 if (Test-DebuggingToolsPresent) {
     Write-Host "Debugging Tools already installed at $DEBUGGERS_X64" -ForegroundColor Green
     Add-ToUserPath -Directory $DEBUGGERS_X64
     Write-Host ""
-    Write-Host "Run 'debugbridge doctor' in a new terminal to verify." -ForegroundColor Green
+    Write-Host "Run 'stackly doctor' in a new terminal to verify." -ForegroundColor Green
     exit 0
 }
 
@@ -69,4 +69,4 @@ if (-not (Test-DebuggingToolsPresent)) {
 Write-Host "Debugging Tools installed successfully." -ForegroundColor Green
 Add-ToUserPath -Directory $DEBUGGERS_X64
 Write-Host ""
-Write-Host "Open a new terminal and run 'debugbridge doctor' to verify." -ForegroundColor Green
+Write-Host "Open a new terminal and run 'stackly doctor' to verify." -ForegroundColor Green

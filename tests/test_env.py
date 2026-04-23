@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-from debugbridge.env import (
+from stackly.env import (
     CANONICAL_DEBUGGERS_X64,
     check_claude_bypass_acknowledged,
     check_claude_cli,
@@ -27,8 +27,8 @@ def test_check_returns_structured_result() -> None:
 def test_check_all_missing_produces_guidance() -> None:
     fake_nonexistent = Path(r"C:\definitely\not\here")
     with (
-        patch("debugbridge.env.shutil.which", return_value=None),
-        patch("debugbridge.env.CANONICAL_DEBUGGERS_X64", fake_nonexistent),
+        patch("stackly.env.shutil.which", return_value=None),
+        patch("stackly.env.CANONICAL_DEBUGGERS_X64", fake_nonexistent),
     ):
         result = check_debugging_tools()
     assert not result.ok
@@ -39,7 +39,7 @@ def test_check_all_missing_produces_guidance() -> None:
 
 def test_check_claude_cli_reports_missing() -> None:
     """When `claude` is not on PATH, the check should fail with install guidance."""
-    with patch("debugbridge.env.shutil.which", return_value=None):
+    with patch("stackly.env.shutil.which", return_value=None):
         result = check_claude_cli()
     assert result.ok is False
     assert result.found == {}
@@ -52,7 +52,7 @@ def test_check_claude_cli_reports_missing() -> None:
 def test_check_claude_cli_reports_found() -> None:
     """When `claude` is on PATH, the check should pass with the resolved path."""
     fake_path = "C:/fake/path/claude.exe"
-    with patch("debugbridge.env.shutil.which", return_value=fake_path):
+    with patch("stackly.env.shutil.which", return_value=fake_path):
         result = check_claude_cli()
     assert result.ok is True
     assert result.found == {"claude": fake_path}

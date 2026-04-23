@@ -7,7 +7,7 @@ WinDbg ships a different format, these tests break noisily.
 
 from __future__ import annotations
 
-from debugbridge.session import DebugSession, _decode_exception_code
+from stackly.session import DebugSession, _decode_exception_code
 
 
 def test_decode_exception_code_known() -> None:

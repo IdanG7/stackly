@@ -1,4 +1,4 @@
-"""End-to-end smoke test for debugbridge fix --auto.
+"""End-to-end smoke test for stackly fix --auto.
 
 This script exercises the full pipeline against a real crash_app process.
 Requires: Windows Debugging Tools, claude CLI authenticated, crash_app built.
@@ -43,14 +43,14 @@ def main() -> int:
 
     try:
         log(
-            f"running: debugbridge fix --pid {crash.pid} --repo {ROOT} "
+            f"running: stackly fix --pid {crash.pid} --repo {ROOT} "
             f'--auto --build-cmd "python -c \'print(1)\'"'
         )
         result = subprocess.run(
             [
                 "uv",
                 "run",
-                "debugbridge",
+                "stackly",
                 "fix",
                 "--pid",
                 str(crash.pid),
@@ -75,13 +75,13 @@ def main() -> int:
             log(f"stderr:\n{result.stderr}")
 
         # Check for patch file
-        patches = list((ROOT / ".debugbridge" / "patches").glob("crash-*.patch"))
+        patches = list((ROOT / ".stackly" / "patches").glob("crash-*.patch"))
         if patches:
             log(f"patch written: {patches[0]}")
             log(f"patch content:\n{patches[0].read_text(encoding='utf-8')[:500]}")
         else:
             log("no patch file found")
-            failed = list((ROOT / ".debugbridge" / "patches").glob("crash-*.failed.md"))
+            failed = list((ROOT / ".stackly" / "patches").glob("crash-*.failed.md"))
             if failed:
                 log(f"failure report: {failed[0]}")
 

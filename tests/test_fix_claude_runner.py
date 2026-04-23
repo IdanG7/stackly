@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from debugbridge.fix.claude_runner import (
+from stackly.fix.claude_runner import (
     _build_claude_run_result,
     _parse_claude_json,
     write_mcp_config,
@@ -29,7 +29,7 @@ def test_write_mcp_config_schema(tmp_path: Path) -> None:
     data = json.loads(result_path.read_text(encoding="utf-8"))
     assert data == {
         "mcpServers": {
-            "debugbridge": {
+            "stackly": {
                 "type": "http",
                 "url": "http://127.0.0.1:8585/mcp",
             }
@@ -41,7 +41,7 @@ def test_write_mcp_config_uses_non_default_host_port(tmp_path: Path) -> None:
     """Verifies URL construction honours non-default host:port."""
     result_path = write_mcp_config(tmp_path, host="10.0.0.5", port=9999)
     data = json.loads(result_path.read_text(encoding="utf-8"))
-    assert data["mcpServers"]["debugbridge"]["url"] == "http://10.0.0.5:9999/mcp"
+    assert data["mcpServers"]["stackly"]["url"] == "http://10.0.0.5:9999/mcp"
 
 
 def test_write_mcp_config_creates_parent_directories(tmp_path: Path) -> None:

@@ -1,4 +1,4 @@
-"""E2E integration test for debugbridge fix (task 2a.4.2).
+"""E2E integration test for stackly fix (task 2a.4.2).
 
 Marked @integration and @slow -- skipped in CI, opt-in locally.
 The 'fake build' variant uses monkeypatched claude to avoid API costs.
@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from typer.testing import CliRunner
 
-from debugbridge.cli import app
+from stackly.cli import app
 
 runner = CliRunner()
 

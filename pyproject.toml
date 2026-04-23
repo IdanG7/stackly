@@ -1,6 +1,6 @@
 [project]
-name = "debugbridge"
-version = "0.2.0"
+name = "stackly"
+version = "0.2.1"
 description = "Remote crash capture MCP server for native Windows applications — exposes DbgEng debugger state to AI clients via MCP."
 readme = "README.md"
 license = { text = "MIT" }
@@ -35,7 +35,7 @@ dev = [
 ]
 
 [project.scripts]
-debugbridge = "debugbridge.cli:app"
+stackly = "stackly.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]

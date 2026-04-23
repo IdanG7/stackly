@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from debugbridge.fix.mcp_client import capture_crash, ensure_server_running
+from stackly.fix.mcp_client import capture_crash, ensure_server_running
 
 
 def _bind_dummy_listener(host: str, port: int) -> socket.socket:
@@ -27,7 +27,7 @@ def test_ensure_server_running_detects_existing() -> None:
     port = 58585
     listener = _bind_dummy_listener(host, port)
     try:
-        with patch("debugbridge.fix.mcp_client.subprocess.Popen") as mock_popen:
+        with patch("stackly.fix.mcp_client.subprocess.Popen") as mock_popen:
             result = ensure_server_running(host=host, port=port)
         assert result is None
         mock_popen.assert_not_called()
@@ -57,7 +57,7 @@ def test_ensure_server_running_spawns_when_absent_and_times_out() -> None:
     fake_proc.poll.return_value = None  # Still "running"
 
     with (
-        patch("debugbridge.fix.mcp_client.subprocess.Popen", return_value=fake_proc) as mock_popen,
+        patch("stackly.fix.mcp_client.subprocess.Popen", return_value=fake_proc) as mock_popen,
         pytest.raises(TimeoutError, match="did not become ready"),
     ):
         # Pass an explicit short deadline so we fail fast instead of waiting 30s.
@@ -83,8 +83,8 @@ def _make_mock_tool(name: str) -> MagicMock:
 
 
 def test_capture_crash_tool_presence_check_rejects_foreign_server() -> None:
-    """When the MCP server exposes tools that are NOT DebugBridge tools,
-    capture_crash must raise an exception whose message contains 'non-DebugBridge'."""
+    """When the MCP server exposes tools that are NOT Stackly tools,
+    capture_crash must raise an exception whose message contains 'non-Stackly'."""
 
     foreign_tools = [_make_mock_tool(n) for n in ["ping", "pong"]]
 
@@ -105,14 +105,14 @@ def test_capture_crash_tool_presence_check_rejects_foreign_server() -> None:
 
     with (
         patch(
-            "debugbridge.fix.mcp_client.streamablehttp_client",
+            "stackly.fix.mcp_client.streamablehttp_client",
             return_value=mock_transport_ctx,
         ),
         patch(
-            "debugbridge.fix.mcp_client.ClientSession",
+            "stackly.fix.mcp_client.ClientSession",
             return_value=mock_session_ctx,
         ),
-        pytest.raises(RuntimeError, match="non-DebugBridge"),
+        pytest.raises(RuntimeError, match="non-Stackly"),
     ):
         capture_crash(pid=0, mcp_url="http://localhost:8585/mcp")
 
@@ -205,11 +205,11 @@ def test_capture_crash_builds_crash_capture_from_mcp_responses() -> None:
 
     with (
         patch(
-            "debugbridge.fix.mcp_client.streamablehttp_client",
+            "stackly.fix.mcp_client.streamablehttp_client",
             return_value=mock_transport_ctx,
         ),
         patch(
-            "debugbridge.fix.mcp_client.ClientSession",
+            "stackly.fix.mcp_client.ClientSession",
             return_value=mock_session_ctx,
         ),
     ):

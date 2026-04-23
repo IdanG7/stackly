@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from debugbridge.models import (
+from stackly.models import (
     AttachResult,
     Breakpoint,
     CallFrame,

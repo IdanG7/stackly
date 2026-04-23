@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from debugbridge.fix.build_runner import run_command
+from stackly.fix.build_runner import run_command
 
 
 def test_run_command_success(tmp_path):
