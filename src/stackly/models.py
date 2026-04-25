@@ -7,7 +7,7 @@ through one of these models so FastMCP can serialize it predictably.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -79,3 +79,30 @@ class StepResult(BaseModel):
 
     status: Literal["stopped", "crashed", "exited"]
     current_frame: CallFrame | None = None
+
+
+class WatchException(BaseModel):
+    """``watch_for_crash`` outcome: a break-worthy exception was raised."""
+
+    outcome: Literal["exception"] = "exception"
+    exception: ExceptionInfo
+
+
+class WatchTimedOut(BaseModel):
+    """``watch_for_crash`` outcome: the timeout elapsed with no exception."""
+
+    outcome: Literal["timed_out"] = "timed_out"
+    elapsed_s: float
+
+
+class WatchTargetExited(BaseModel):
+    """``watch_for_crash`` outcome: the target process exited before an exception."""
+
+    outcome: Literal["target_exited"] = "target_exited"
+    elapsed_s: float
+
+
+WatchResult = Annotated[
+    WatchException | WatchTimedOut | WatchTargetExited,
+    Field(discriminator="outcome"),
+]

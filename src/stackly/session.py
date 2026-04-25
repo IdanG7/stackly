@@ -22,6 +22,8 @@ from __future__ import annotations
 import contextlib
 import re
 import threading
+import time
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from stackly.models import (
@@ -32,6 +34,10 @@ from stackly.models import (
     Local,
     StepResult,
     ThreadInfo,
+    WatchException,
+    WatchResult,
+    WatchTargetExited,
+    WatchTimedOut,
 )
 
 if TYPE_CHECKING:  # pybag is only imported at method-call time
@@ -57,6 +63,14 @@ _EXCEPTION_CODE_NAMES: dict[int, str] = {
     0xC0000008: "EXCEPTION_INVALID_HANDLE",
     0xE06D7363: "CPP_EXCEPTION",  # Microsoft C++ exception magic
 }
+
+
+# Exception codes that are debugger-synthetic and must NOT be treated as real
+# crashes. They arise from normal debugger attach / trace operations:
+#   0x80000003 = EXCEPTION_BREAKPOINT  (initial attach break, int3 instructions)
+#   0x80000004 = EXCEPTION_SINGLE_STEP (trace flag, single-step breakpoints)
+# Empirically confirmed by Task 2.5.0.3 (test_watch_derisk_nonexception_break.py).
+_SYNTHETIC_CODES: frozenset[int] = frozenset({0x80000003, 0x80000004})
 
 
 def _decode_exception_code(code: int) -> str:
@@ -288,34 +302,43 @@ class DebugSession:
     def get_exception(self) -> ExceptionInfo | None:
         with self._lock:
             dbg = self._require_attached()
-            last_event = dbg.cmd(".lastevent", quiet=True)
-            m = _LASTEVENT_RE.search(last_event)
-            if not m:
-                return None
-            code = int(m.group("code"), 16)
-            desc = m.group("desc").strip()
-            tid = int(m.group("tid"), 16)
+            return self._parse_lastevent_unlocked(dbg)
 
-            # Get the faulting address via the exception record. This is only
-            # meaningful if the last event was actually an exception — for a
-            # manual break the ExceptionRecord may be stale.
-            exr = dbg.cmd(".exr -1", quiet=True)
-            addr_match = _EXR_ADDR_RE.search(exr)
-            address = 0
-            if addr_match:
-                try:
-                    address = int(addr_match.group(1).replace("`", ""), 16)
-                except ValueError:
-                    address = 0
+    def _parse_lastevent_unlocked(self, dbg: UserDbg) -> ExceptionInfo | None:
+        """Parse ``.lastevent`` + ``.exr -1`` into an ``ExceptionInfo``.
 
-            return ExceptionInfo(
-                code=code,
-                code_name=_decode_exception_code(code),
-                address=address,
-                description=desc,
-                is_first_chance=m.group("chance").lower() == "first",
-                faulting_thread_tid=tid,
-            )
+        Must be called with ``self._lock`` already held (does NOT acquire the
+        lock itself). Factored out of ``get_exception()`` so the polling loop
+        in ``wait_for_exception()`` can call it without a recursive lock acquire.
+        """
+        last_event = dbg.cmd(".lastevent", quiet=True)
+        m = _LASTEVENT_RE.search(last_event)
+        if not m:
+            return None
+        code = int(m.group("code"), 16)
+        desc = m.group("desc").strip()
+        tid = int(m.group("tid"), 16)
+
+        # Get the faulting address via the exception record. This is only
+        # meaningful if the last event was actually an exception — for a
+        # manual break the ExceptionRecord may be stale.
+        exr = dbg.cmd(".exr -1", quiet=True)
+        addr_match = _EXR_ADDR_RE.search(exr)
+        address = 0
+        if addr_match:
+            try:
+                address = int(addr_match.group(1).replace("`", ""), 16)
+            except ValueError:
+                address = 0
+
+        return ExceptionInfo(
+            code=code,
+            code_name=_decode_exception_code(code),
+            address=address,
+            description=desc,
+            is_first_chance=m.group("chance").lower() == "first",
+            faulting_thread_tid=tid,
+        )
 
     def get_threads(self) -> list[ThreadInfo]:
         with self._lock:
@@ -438,6 +461,90 @@ class DebugSession:
             # go() blocks until the next event; for "just resume" behavior we
             # set the status without waiting. pybag's cmd("g") does that.
             dbg.cmd("g", quiet=True)
+
+    # ---- Watch / polling ----
+
+    def wait_for_exception(
+        self,
+        pid: int,
+        poll_s: int = 1,
+        timeout_s: int | None = None,
+        stop_check: Callable[[], bool] | None = None,
+    ) -> WatchResult:
+        """Block until a break-worthy exception fires on the attached process.
+
+        Polls ``dbg.wait(timeout=poll_s)`` in a tight loop, inspects
+        ``exec_status()`` after each tick, and returns one of:
+
+        - ``WatchException`` — a non-synthetic exception was caught.
+        - ``WatchTimedOut`` — ``timeout_s`` elapsed with no exception.
+        - ``WatchTargetExited`` — the target process exited cleanly.
+
+        Parameters
+        ----------
+        pid:
+            Expected PID of the attached process. Raises ``DebugSessionError``
+            on mismatch.
+        poll_s:
+            Polling interval in seconds. Clamped to 1 (pybag's floor — values
+            below 1 are silently broken due to integer division inside pybag's
+            ``_worker_wait``).
+        timeout_s:
+            Maximum time to wait in seconds. ``None`` means wait indefinitely.
+        stop_check:
+            Optional callable. If it returns ``True``, the loop exits
+            immediately and returns ``WatchTimedOut``.
+        """
+        poll_s = max(1, poll_s)
+
+        with self._lock:
+            dbg = self._require_attached()
+
+            # Validate that we're attached to the expected PID.
+            actual_pid: int = dbg.pid
+            if actual_pid != pid:
+                raise DebugSessionError(
+                    f"Session attached to pid={actual_pid}, client asked for pid={pid}"
+                )
+
+            start = time.monotonic()
+
+            while True:
+                # Cancellation check (must come before timeout so caller can
+                # interrupt without waiting for the next deadline check).
+                if stop_check is not None and stop_check():
+                    return WatchTimedOut(elapsed_s=time.monotonic() - start)
+
+                # Timeout check.
+                if timeout_s is not None and (time.monotonic() - start) >= timeout_s:
+                    return WatchTimedOut(elapsed_s=time.monotonic() - start)
+
+                # Block until next debug event or poll_s elapses.
+                dbg.wait(timeout=poll_s)
+
+                status: str = dbg.exec_status()
+
+                if "NO_DEBUGGEE" in status.upper():
+                    return WatchTargetExited(elapsed_s=time.monotonic() - start)
+
+                if "BREAK" in status.upper():
+                    exc = self._parse_lastevent_unlocked(dbg)
+                    if exc is None:
+                        # Non-exception break (e.g. module-load breakpoint) —
+                        # resume and continue polling.
+                        dbg.cmd("g", quiet=True)
+                        continue
+
+                    # Filter out synthetic debugger events (initial attach break,
+                    # single-step trace). These are NOT real crashes.
+                    if (exc.code & 0xFFFFFFFF) in _SYNTHETIC_CODES:
+                        dbg.cmd("g", quiet=True)
+                        continue
+
+                    return WatchException(exception=exc)
+
+                # Status is GO, STEP_*, or something else — keep polling.
+                # (no-op; loop continues)
 
     # ---- Internals ----
 

@@ -54,15 +54,17 @@ Deliver an MCP server and a paired fix agent that catch Windows native crashes a
 - Signed wheels (optional stretch)
 - Docs site with Quickstart, MCP client configs, troubleshooting
 
-### Phase 2.5 — Crash auto-detection
+### Phase 2.5 — Crash auto-detection ✅ COMPLETE (2026-04-24)
 
 **Goal:** Stackly watches the attached process and triggers the fix agent automatically when a crash fires.
 
-**Scope:**
-- Background thread driving `dbg.wait()` with timeout loop
-- Surface callback via `pybag.dbgeng.callbacks.EventHandler` for exception events
-- `stackly watch --pid N` or daemon mode
-- Consider: Windows AeDebug registry integration (JIT postmortem debugger) — admin required
+**Delivered:** `stackly watch --pid N --repo PATH` CLI + `watch_for_crash` MCP tool (10th), `WatchResult` discriminated union, `DebugSession.wait_for_exception` polling method with synthetic-code filter, `watch/dispatcher.py` orchestrator with signal handlers + stay-resident dedup + re-attach-failure exit. Version bumped to 0.2.5. 115 non-integration tests passing; Wave 0 derisks (4) + E2E test all green on Windows + pybag 2.2.16. Codex review P1 + P2 fixes applied (poll-seconds wired through; SIGINT detach moved to fresh thread to avoid nested asyncio.run).
+
+**Exit evidence:** `tests/test_watch_e2e.py::test_watch_dispatches_run_handoff_against_live_server` proves `crash_app` → live `stackly serve` → `watch_for_crash` → `run_handoff` round-trip end-to-end (< 3 s).
+
+**Known tech debt:** client-side dedup in stay-resident mode (`--max-crashes >1`) computes `compute_crash_hash` on an empty-callstack stub — dedups reliably only when both paths see the same empty-callstack shape. Stay-resident is a low-traffic path; full callstack-based dedup is deferred.
+
+**Deferred out of scope (reaffirmed):** `pybag.dbgeng.callbacks.EventHandler` callback detection (deadlock risk — RESEARCH.md §2.4); Windows AeDebug JIT registry integration; multi-PID daemon mode.
 
 ### Phase 3 — Runtime adapter expansion
 

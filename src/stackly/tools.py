@@ -20,6 +20,7 @@ from stackly.models import (
     Local,
     StepResult,
     ThreadInfo,
+    WatchResult,
 )
 from stackly.session import DebugSession
 
@@ -120,3 +121,32 @@ def register(mcp: FastMCP, session: DebugSession) -> None:
     def continue_execution() -> None:
         """Resume execution until the next event (crash, breakpoint, exit)."""
         session.continue_execution()
+
+    # ---- Tier C — watch / auto-detection ----
+
+    @mcp.tool()
+    async def watch_for_crash(
+        pid: int,
+        poll_s: int = 1,
+        timeout_s: int | None = None,
+    ) -> WatchResult:
+        """Block until a break-worthy exception fires on the attached process.
+
+        Call after attach_process on the same MCP session. Returns a
+        WatchResult discriminated union: WatchException on crash,
+        WatchTimedOut on deadline expiry, WatchTargetExited on clean exit.
+
+        Poll interval is clamped to pybag's 1-second minimum granularity;
+        smaller values are silently raised to 1 second.
+        """
+        from functools import partial
+
+        import anyio
+        return await anyio.to_thread.run_sync(  # type: ignore[attr-defined]
+            partial(
+                session.wait_for_exception,
+                pid=pid,
+                poll_s=poll_s,
+                timeout_s=timeout_s,
+            )
+        )

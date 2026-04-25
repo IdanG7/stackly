@@ -95,50 +95,53 @@ def spawn_crash_app_waiting() -> subprocess.Popen:
 async def run_client_flow(pid: int) -> int:
     """Open MCP connection, drive tools, return exit code."""
     try:
-        async with streamablehttp_client(MCP_URL) as (read, write, _session_id_cb):
-            async with ClientSession(read, write) as session:
-                log("initializing MCP session …")
-                await session.initialize()
+        async with (
+            streamablehttp_client(MCP_URL) as (read, write, _session_id_cb),
+            ClientSession(read, write) as session,
+        ):
+            log("initializing MCP session …")
+            await session.initialize()
 
-                log("listing tools …")
-                tools = await session.list_tools()
-                tool_names = sorted(t.name for t in tools.tools)
-                log(f"tools exposed: {tool_names}")
-                expected = {
-                    "attach_process",
-                    "continue_execution",
-                    "detach_process",
-                    "get_callstack",
-                    "get_exception",
-                    "get_locals",
-                    "get_threads",
-                    "set_breakpoint",
-                    "step_next",
-                }
-                missing = expected - set(tool_names)
-                if missing:
-                    log(f"FAIL: missing tools {missing}")
-                    return 1
+            log("listing tools …")
+            tools = await session.list_tools()
+            tool_names = sorted(t.name for t in tools.tools)
+            log(f"tools exposed: {tool_names}")
+            expected = {
+                "attach_process",
+                "continue_execution",
+                "detach_process",
+                "get_callstack",
+                "get_exception",
+                "get_locals",
+                "get_threads",
+                "set_breakpoint",
+                "step_next",
+                "watch_for_crash",
+            }
+            missing = expected - set(tool_names)
+            if missing:
+                log(f"FAIL: missing tools {missing}")
+                return 1
 
-                log(f"calling attach_process(pid={pid}) …")
-                attach = await session.call_tool("attach_process", {"pid": pid})
-                log(f"attach.content: {attach.content}")
-                log(f"attach.structuredContent: {attach.structuredContent}")
-                status = (attach.structuredContent or {}).get("status")
-                if status != "attached":
-                    log(f"FAIL: attach_process returned {status!r}")
-                    return 1
+            log(f"calling attach_process(pid={pid}) …")
+            attach = await session.call_tool("attach_process", {"pid": pid})
+            log(f"attach.content: {attach.content}")
+            log(f"attach.structuredContent: {attach.structuredContent}")
+            status = (attach.structuredContent or {}).get("status")
+            if status != "attached":
+                log(f"FAIL: attach_process returned {status!r}")
+                return 1
 
-                log("calling get_threads …")
-                threads = await session.call_tool("get_threads", {})
-                log(f"threads.structuredContent: {threads.structuredContent}")
+            log("calling get_threads …")
+            threads = await session.call_tool("get_threads", {})
+            log(f"threads.structuredContent: {threads.structuredContent}")
 
-                log("calling get_callstack …")
-                stack = await session.call_tool("get_callstack", {"max_frames": 10})
-                log(f"callstack.structuredContent: {stack.structuredContent}")
+            log("calling get_callstack …")
+            stack = await session.call_tool("get_callstack", {"max_frames": 10})
+            log(f"callstack.structuredContent: {stack.structuredContent}")
 
-                log("SUCCESS — all tool calls completed")
-                return 0
+            log("SUCCESS — all tool calls completed")
+            return 0
     except Exception as e:
         log(f"FAIL: exception during client flow: {e!r}")
         import traceback

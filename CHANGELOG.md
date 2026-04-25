@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.5] — 2026-04-24 — Crash auto-detection (Phase 2.5)
+
+### Added
+
+- **`stackly watch --pid N --repo PATH` CLI command** — blocks on a live process until it crashes, then dispatches the fix agent (hand-off by default, `--auto` for headless patching).
+- **`watch_for_crash` MCP tool (10th tool)** — async, `anyio.to_thread.run_sync` offload preserves FastMCP event-loop responsiveness during long watches.
+- **`WatchResult` discriminated union** in `stackly.models`: `WatchException` | `WatchTimedOut` | `WatchTargetExited`.
+- **`DebugSession.wait_for_exception`** polling method with `_SYNTHETIC_CODES` filter suppressing attach-break / single-step false positives.
+- **Rich spinner** during `watch`; `--quiet` for scripting.
+- **Stay-resident mode** via `--max-crashes N`; re-attach failure exits cleanly (empirical: pybag 2.2.16 cannot re-attach a terminated PID).
+- **`tests/test_doctor_unchanged.py`** regression guard encoding the "no new external deps" invariant from CONTEXT.md.
+
+### Fixed (Codex review)
+
+- **`--poll-seconds` flag is now honored** end-to-end (`stackly watch` → `run_watch` → `_watch_once` → `watch_for_crash` MCP call). Previously hardcoded to 1.
+- **SIGINT handler's best-effort MCP detach** now runs in a fresh daemon thread with its own event loop instead of calling `asyncio.run(...)` on the main thread (which was already inside an active `asyncio.run` and therefore raised `RuntimeError`, leaving the target attached unexpectedly).
+
 ## [0.2.1] — 2026-04-23 — Renamed to Stackly
 
 **BREAKING CHANGES.** This release is the rename of the project from DebugBridge to Stackly. Zero behavioral changes, zero new features, zero regressions — but every name-surface is new, which breaks any config that referenced the old name.

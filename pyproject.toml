@@ -1,6 +1,6 @@
 [project]
 name = "stackly"
-version = "0.2.1"
+version = "0.2.5"
 description = "Remote crash capture MCP server for native Windows applications — exposes DbgEng debugger state to AI clients via MCP."
 readme = "README.md"
 license = { text = "MIT" }
