@@ -122,6 +122,23 @@ Edit `.cursor/mcp.json` in your project (or the global Cursor config):
 | `step_next` | Step over one line |
 | `continue_execution` | Resume the process |
 | `detach_process` | Releases the target process without stopping the server |
+| `watch_for_crash` | Block until the attached target throws a break-worthy exception |
+
+## Watch mode
+
+`stackly watch --pid <N> --repo <path>` attaches to a live Windows process and blocks until that process throws, then auto-dispatches the fix agent. The server-side polling loop runs at a 1-second floor (pybag granularity); Ctrl-C cleanly detaches and exits 130.
+
+```bash
+# Wait for a crash, then open Claude Code with the briefing preloaded
+uv run stackly watch --pid 12345 --repo D:/myapp
+
+# Wait for a crash, then produce a validated .patch headless
+uv run stackly watch --pid 12345 --repo D:/myapp --auto \
+    --build-cmd "cmake --build build" --test-cmd "ctest --test-dir build"
+
+# Stay resident: handle up to 3 crashes, with a 30-min deadline
+uv run stackly watch --pid 12345 --repo D:/myapp --max-crashes 3 --max-wait-minutes 30
+```
 
 ## Fix-loop agent
 
